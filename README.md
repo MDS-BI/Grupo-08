@@ -60,6 +60,40 @@ Correspondencia entre la arquitectura base de la aplicación y el dominio de Cal
 
 ## 5. Modelo Entidad-Relación Conceptual (MER)
 
+El diseño de datos para el módulo de **Control de Calidad** sigue el modelo conceptual relacional del curso, estableciendo la trazabilidad entre el maestro de lotes y sus auditorías técnicas:
+
+### 5.1 Diagrama MER Conceptual
+
+```text
+       +-----------------------+                         +--------------------------+
+       |    LoteProduccion     |                         |     OrdenInspeccion      |
+       +-----------------------+                         +--------------------------+
+       | * codigo_lote (PK)    |                         | * folio_inspeccion (PK)  |
+       |   nombre_producto     |---(1, n)-------+        |   fecha_evaluacion       |
+       |   planta_origen       |                |        |   inspector_responsable  |
+       |   fecha_elaboracion   |                |        |   tamano_muestra         |
+       |   fecha_vencimiento   |             [recibe]    |   unidades_defectuosas   |
+       |   nivel_criticidad    |                |        |   tipo_defecto           |
+       +-----------------------+                |        |   estado_resolucion      |
+                   |                            |        +--------------------------+
+                   |                            +--------(1, 1)---|
+                (1, n)
+                   |
+             [especifica]
+                   |
+                (1, 1)
+                   |
+       +-----------------------+
+       | CriterioAceptacion    |
+       +-----------------------+
+       | * id_criterio (PK)    |
+       |   norma_tecnica       |
+       |   parametro_evaluado  |
+       |   tolerancia_min      |
+       |   tolerancia_max      |
+       +-----------------------+
+
+
 # ERP Software Base Module (Vite + Vanilla JS)
 
 Minimal single-page app serving as an Enterprise Resource Planning (ERP) software base module. It provides the common foundation for building custom ERP modules: master data management (Entities) and linked transactional documents (Documents) with create/edit/delete/search, validation, and browser localStorage persistence — using Vite and vanilla HTML, CSS, and JavaScript.
