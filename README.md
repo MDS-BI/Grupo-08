@@ -1,3 +1,65 @@
+# Módulo ERP: Control de Calidad
+
+Módulo de software ERP orientado a **Control de Gestión**, enfocado en la trazabilidad, inspección y aseguramiento de estándares de calidad sobre lotes de producción y recepción de suministros.
+
+---
+
+## 1. Información del Equipo
+
+* **Asignatura:** Modelación de Sistemas (580211)
+* **Módulo:** Control de Calidad
+* **Equipo de Trabajo:**
+  * Plaza Palacios Eduardo Andres
+  * Ramírez Inostroza Agustín Antonio
+  * Llanos Leal Carla Antonia
+  * Valenzuela Carrasco Raquel Esmeralda
+  * Athens Squella Constanza Isidora
+  * Alvear Muñoz Benjamín Andrés
+
+---
+
+## 2. Visión del Producto
+
+### Propósito del Módulo
+Asegurar que cada lote elaborado o materia prima recibida cumpla con los estándares de aceptación técnica y especificaciones de calidad antes de su liberación a inventario o despacho comercial, previniendo mermas, reprocesos y reclamos de clientes.
+
+### Clientes y Usuarios Clave
+* **Inspectores / Analistas de Calidad:** Personal operativo responsable de registrar muestreos, ingresar mediciones técnicas y reportar defectos o no conformidades.
+* **Jefatura de Calidad:** Rol supervisor que evalúa el historial, aprueba liberaciones y gestiona lotes retenidos o rechazados.
+* **Supervisores de Operaciones / Planta:** Usuarios que monitorean el estado de los lotes para coordinar reprocesos, almacenamiento en cuarentena o autorización de entrega.
+
+---
+
+## 3. Descripción Conceptual del Dominio (Caso de Negocio)
+
+Una planta de manufactura requiere implementar un sistema ERP para gestionar el aseguramiento y control de calidad de sus operaciones. Para cada **Lote de Producción (Entidad)**, el sistema mantiene un identificador o código de lote único en la planta, el nombre del producto, la línea o planta de procedencia, fecha de elaboración, fecha de vencimiento y un nivel de criticidad asignado. A su vez, cada lote puede regirse por una o varias normas técnicas con rangos de tolerancia específicos.
+
+Cualquier analista habilitado puede registrar auditorías técnicas: cada control se formaliza mediante una **Orden de Inspección (Documento)** caracterizada por un número de folio correlativo, fecha de evaluación, tamaño de la muestra auditada, cantidad de unidades defectuosas encontradas y la clasificación de la no conformidad (dimensional, visual/empaque o funcional). Opcionalmente, el inspector puede registrar notas técnicas y observaciones.
+
+Un lote de producción está vinculado con sus órdenes de inspección mediante una relación histórica: un lote puede ser inspeccionado una o varias veces a lo largo de su procesamiento (por ejemplo, muestreo inicial y re-inspección post-reproceso). Toda orden de inspección pertenece obligatoriamente a un único lote específico y dictamina el estado del control (Pendiente, En Inspección, Aprobado, En Cuarentena o Rechazado). Si un lote es eliminado del sistema, todas sus órdenes de inspección vinculadas se eliminan en cascada para preservar la consistencia de los registros.
+
+---
+
+## 4. Mapeo Conceptual al Módulo Base ERP
+
+Correspondencia entre la arquitectura base de la aplicación y el dominio de Calidad:
+
+| Elemento Base ERP | Instanciación en Calidad | Atributos Principales |
+| :--- | :--- | :--- |
+| **Entidad (Master Data)** | **Lote de Producción** | Código de lote, nombre producto, línea/planta de origen, fecha elaboración, fecha vencimiento, criticidad. |
+| **Documento (Transaccional)** | **Orden de Inspección** | Serie y folio, fecha inspección, tamaño muestra, defectos detectados, tipo de falla, estado final. |
+
+### Ciclo de Estados de Inspección:
+* `Pendiente`: Lote ingresado en espera de toma de muestras.
+* `En Inspección`: Pruebas de laboratorio o metrología en curso.
+* `Aprobado`: Cumplimiento del 100% de tolerancias. Lote liberado.
+* `En Cuarentena`: No conformidades menores detectadas; lote bajo observación o re-muestreo.
+* `Rechazado`: No cumple parámetros críticos. Lote bloqueado para descarte o reproceso.
+
+---
+
+## 5. Modelo Entidad-Relación Conceptual (MER)
+
 # ERP Software Base Module (Vite + Vanilla JS)
 
 Minimal single-page app serving as an Enterprise Resource Planning (ERP) software base module. It provides the common foundation for building custom ERP modules: master data management (Entities) and linked transactional documents (Documents) with create/edit/delete/search, validation, and browser localStorage persistence — using Vite and vanilla HTML, CSS, and JavaScript.
