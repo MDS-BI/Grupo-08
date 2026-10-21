@@ -91,7 +91,8 @@ erDiagram
         decimal tolerancia_max "Valor máximo aceptable"
     }
 ```
-  
+
+---
        
 # ERP Software Base Module (Vite + Vanilla JS)
 
