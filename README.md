@@ -32,11 +32,9 @@ Asegurar que cada lote elaborado o materia prima recibida cumpla con los estánd
 
 ## 3. Descripción Conceptual del Dominio (Caso de Negocio)
 
-Una planta de manufactura requiere implementar un sistema ERP para gestionar el aseguramiento y control de calidad de sus operaciones. Para cada **Lote de Producción (Entidad)**, el sistema mantiene un identificador o código de lote único en la planta, el nombre del producto, la línea o planta de procedencia, fecha de elaboración, fecha de vencimiento y un nivel de criticidad asignado. A su vez, cada lote puede regirse por una o varias normas técnicas con rangos de tolerancia específicos.
+Una planta productiva requiere implementar un módulo ERP para gestionar el aseguramiento y control de calidad de sus operaciones. Para cada **Lote de Producción (Entidad)**, el sistema mantiene un código identificador único, el nombre o descripción del ítem, la línea o planta de procedencia, fecha de elaboración, fecha de caducidad y un nivel de criticidad asignado; asimismo, cada lote tiene asociados diversos criterios técnicos y tolerancias normativas que debe satisfacer para su liberación comercial.
 
-Cualquier analista habilitado puede registrar auditorías técnicas: cada control se formaliza mediante una **Orden de Inspección (Documento)** caracterizada por un número de folio correlativo, fecha de evaluación, tamaño de la muestra auditada, cantidad de unidades defectuosas encontradas y la clasificación de la no conformidad (dimensional, visual/empaque o funcional). Opcionalmente, el inspector puede registrar notas técnicas y observaciones.
-
-Un lote de producción está vinculado con sus órdenes de inspección mediante una relación histórica: un lote puede ser inspeccionado una o varias veces a lo largo de su procesamiento (por ejemplo, muestreo inicial y re-inspección post-reproceso). Toda orden de inspección pertenece obligatoriamente a un único lote específico y dictamina el estado del control (Pendiente, En Inspección, Aprobado, En Cuarentena o Rechazado). Si un lote es eliminado del sistema, todas sus órdenes de inspección vinculadas se eliminan en cascada para preservar la consistencia de los registros.
+Cualquier analista acreditado puede ejecutar controles formales mediante el registro de una **Orden de Inspección (Documento)**, la cual se caracteriza por su número de folio correlativo, fecha de evaluación, tamaño muestral analizado, cantidad de no conformidades detectadas, tipología de defecto (dimensional, funcional o empaque) y observaciones técnicas. Toda orden de inspección pertenece obligatoriamente a un único lote específico y dictamina el estado del control (Pendiente, En Inspección, Aprobado, En Cuarentena o Rechazado), manteniéndose una relación histórica donde un lote puede acumular múltiples inspecciones que se descartan en cascada si el lote maestro es eliminado.
 
 ---
 
@@ -59,41 +57,42 @@ Correspondencia entre la arquitectura base de la aplicación y el dominio de Cal
 ---
 
 ## 5. Modelo Entidad-Relación Conceptual (MER)
+```mermaid
+erDiagram
+    LOTE_PRODUCCION ||--|{ ORDEN_INSPECCION : "recibe"
+    LOTE_PRODUCCION ||--|{ CRITERIO_ACEPTACION : "especifica"
 
-El diseño de datos para el módulo de **Control de Calidad** sigue el modelo conceptual relacional del curso, estableciendo la trazabilidad entre el maestro de lotes y sus auditorías técnicas:
+    LOTE_PRODUCCION {
+        varchar codigo_lote PK "Código identificador único del lote"
+        varchar nombre_producto "Denominación técnica o comercial"
+        varchar linea_planta_origen "Planta o línea de procedencia"
+        date fecha_elaboracion "Fecha de manufactura"
+        date fecha_vencimiento "Fecha de expiración"
+        varchar nivel_criticidad "Criticidad: Baja, Media, Crítica"
+    }
 
-### 5.1 Diagrama MER Conceptual
+    ORDEN_INSPECCION {
+        int folio_inspeccion PK "Número correlativo de acta"
+        varchar codigo_lote FK "Referencia al lote evaluado"
+        date fecha_evaluacion "Fecha y hora de muestreo"
+        varchar inspector_responsable "Nombre del auditor"
+        int tamano_muestra "Unidades auditadas"
+        int unidades_defectuosas "Unidades no conformes"
+        varchar tipo_defecto "Dimensional, Empaque, Funcional"
+        varchar estado_resolucion "Pendiente, En Inspección, Aprobado, Cuarentena, Rechazado"
+    }
 
-```text
-       +-----------------------+                         +--------------------------+
-       |    LoteProduccion     |                         |     OrdenInspeccion      |
-       +-----------------------+                         +--------------------------+
-       | * codigo_lote (PK)    |                         | * folio_inspeccion (PK)  |
-       |   nombre_producto     |---(1, n)-------+        |   fecha_evaluacion       |
-       |   planta_origen       |                |        |   inspector_responsable  |
-       |   fecha_elaboracion   |                |        |   tamano_muestra         |
-       |   fecha_vencimiento   |             [recibe]    |   unidades_defectuosas   |
-       |   nivel_criticidad    |                |        |   tipo_defecto           |
-       +-----------------------+                |        |   estado_resolucion      |
-                   |                            |        +--------------------------+
-                   |                            +--------(1, 1)---|
-                (1, n)
-                   |
-             [especifica]
-                   |
-                (1, 1)
-                   |
-       +-----------------------+
-       | CriterioAceptacion    |
-       +-----------------------+
-       | * id_criterio (PK)    |
-       |   norma_tecnica       |
-       |   parametro_evaluado  |
-       |   tolerancia_min      |
-       |   tolerancia_max      |
-       +-----------------------+
-
-
+    CRITERIO_ACEPTACION {
+        int id_criterio PK "Identificador único de norma"
+        varchar codigo_lote FK "Referencia al lote que norma"
+        varchar norma_tecnica "Norma de referencia (ej. ISO/NCh)"
+        varchar parametro_evaluado "Propiedad física o química analizada"
+        decimal tolerancia_min "Valor mínimo aceptable"
+        decimal tolerancia_max "Valor máximo aceptable"
+    }
+```
+  
+       
 # ERP Software Base Module (Vite + Vanilla JS)
 
 Minimal single-page app serving as an Enterprise Resource Planning (ERP) software base module. It provides the common foundation for building custom ERP modules: master data management (Entities) and linked transactional documents (Documents) with create/edit/delete/search, validation, and browser localStorage persistence — using Vite and vanilla HTML, CSS, and JavaScript.
