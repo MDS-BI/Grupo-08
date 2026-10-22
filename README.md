@@ -38,6 +38,8 @@ Cualquier analista acreditado puede ejecutar controles formales mediante el regi
 
 ---
 
+> **Nota:** El modelo detallado a implementar se define en [`data-model.md`](data-model.md) (tablas `quality_inspection_plans`, `quality_inspections`, `quality_inspection_results`, `non_conformances`, `corrective_actions` con patrón polimórfico y flujo CAPA). Esta sección describe la visión conceptual inicial.
+
 ## 4. Mapeo Conceptual al Módulo Base ERP
 
 Correspondencia entre la arquitectura base de la aplicación y el dominio de Calidad:
