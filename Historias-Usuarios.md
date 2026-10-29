@@ -33,3 +33,10 @@ Criterios de Aceptación:
 ​La pantalla de historial debe incluir un buscador por "ID de Lote" y selectores de rango de fechas (desde/hasta).
 ​La tabla de resultados debe actualizarse para mostrar únicamente los registros que coincidan con los filtros aplicados.
 ​Debe existir un botón visible de "Limpiar Filtros" que restaure la tabla a su vista original con todos los registros.
+
+US-06: Gestión de Lotes en Cuarentena y Acciones Correctivas (CAPA)
+Historia de Usuario: Como jefatura de calidad, quiero revisar los lotes retenidos en cuarentena y asignar una acción correctiva (CAPA) con responsable y plazo, para asegurar el tratamiento de no conformidades antes de autorizar o rechazar su liberación definitiva.
+Criterios de Aceptación:
+La interfaz debe incluir una vista o pestaña exclusiva de "Lotes en Cuarentena" mostrando ID de lote, nivel de criticidad y tipo de defecto detectado.
+Cada fila debe contar con un botón "Asignar CAPA" que abra un modal para ingresar la causa raíz, la acción a tomar (re-muestreo o reproceso) y la fecha límite.
+El sistema debe validar que los campos de la acción correctiva no queden vacíos y actualizar visualmente la etiqueta del lote a "Cuarentena - En Tratamiento" tras guardar.
