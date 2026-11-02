@@ -32,15 +32,19 @@ Asegurar que cada lote elaborado o materia prima recibida cumpla con los estánd
 
 ## 3. Descripción Conceptual del Dominio (Caso de Negocio)
 
+> Documento histórico de contexto. La especificación vigente, con prioridades, criterios de aceptación y reglas de integridad, está en [`specs/002-quality-control-module/spec.md`](specs/002-quality-control-module/spec.md).
+
 Una planta productiva requiere implementar un módulo ERP para gestionar el aseguramiento y control de calidad de sus operaciones. Para cada **Lote de Producción (Entidad)**, el sistema mantiene un código identificador único, el nombre o descripción del ítem, la línea o planta de procedencia, fecha de elaboración, fecha de caducidad y un nivel de criticidad asignado; asimismo, cada lote tiene asociados diversos criterios técnicos y tolerancias normativas que debe satisfacer para su liberación comercial.
 
 Cualquier analista acreditado puede ejecutar controles formales mediante el registro de una **Orden de Inspección (Documento)**, la cual se caracteriza por su número de folio correlativo, fecha de evaluación, tamaño muestral analizado, cantidad de no conformidades detectadas, tipología de defecto (dimensional, funcional o empaque) y observaciones técnicas. Toda orden de inspección pertenece obligatoriamente a un único lote específico y dictamina el estado del control (Pendiente, En Inspección, Aprobado, En Cuarentena o Rechazado), manteniéndose una relación histórica donde un lote puede acumular múltiples inspecciones que se descartan en cascada si el lote maestro es eliminado.
 
 ---
 
-> **Nota:** El modelo detallado a implementar se define en [`data-model.md`](data-model.md) (tablas `quality_inspection_plans`, `quality_inspections`, `quality_inspection_results`, `non_conformances`, `corrective_actions` con patrón polimórfico y flujo CAPA). Esta sección describe la visión conceptual inicial.
+> **Nota:** El modelo detallado vigente se define en [`specs/002-quality-control-module/data-model.md`](specs/002-quality-control-module/data-model.md) (tablas `quality_inspection_plans`, `quality_inspections`, `quality_inspection_results`, `non_conformances`, `corrective_actions` con patrón polimórfico y flujo CAPA). El `data-model.md` de la raíz es un documento histórico. Esta sección describe la visión conceptual inicial; en la especificación vigente, "lote" equivale al documento origen (`reference_module` + `reference_id`).
 
 ## 4. Mapeo Conceptual al Módulo Base ERP
+
+> Mapeo histórico. En la especificación vigente, "lote" equivale al documento origen (`reference_module` + `reference_id`) y los estados canónicos son `draft`/`completed`, `passed`/`failed`/`conditional` y los estados de no conformidad/CAPA definidos en [`specs/002-quality-control-module/spec.md`](specs/002-quality-control-module/spec.md).
 
 Correspondencia entre la arquitectura base de la aplicación y el dominio de Calidad:
 
@@ -49,7 +53,7 @@ Correspondencia entre la arquitectura base de la aplicación y el dominio de Cal
 | **Entidad (Master Data)** | **Lote de Producción** | Código de lote, nombre producto, línea/planta de origen, fecha elaboración, fecha vencimiento, criticidad. |
 | **Documento (Transaccional)** | **Orden de Inspección** | Serie y folio, fecha inspección, tamaño muestra, defectos detectados, tipo de falla, estado final. |
 
-### Ciclo de Estados de Inspección:
+### Ciclo de Estados de Inspección (histórico):
 * `Pendiente`: Lote ingresado en espera de toma de muestras.
 * `En Inspección`: Pruebas de laboratorio o metrología en curso.
 * `Aprobado`: Cumplimiento del 100% de tolerancias. Lote liberado.
@@ -58,7 +62,9 @@ Correspondencia entre la arquitectura base de la aplicación y el dominio de Cal
 
 ---
 
-## 5. Modelo Entidad-Relación Conceptual (MER)
+## 5. Modelo Entidad-Relación Conceptual Histórico (MER)
+
+> Este MER conserva el vocabulario inicial (`LOTE_PRODUCCION`, `ORDEN_INSPECCION`). No es la fuente de verdad ni debe usarse para implementar. El modelo vigente está en [`specs/002-quality-control-module/data-model.md`](specs/002-quality-control-module/data-model.md).
 ```mermaid
 erDiagram
     LOTE_PRODUCCION ||--|{ ORDEN_INSPECCION : "recibe"

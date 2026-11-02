@@ -1,4 +1,6 @@
-* # Plan de Trabajo: Módulo ERP de Control de Calidad (Quality Control)
+> **Documento histórico.** Este plan conserva el contexto inicial del proyecto. La fuente de verdad vigente es [`specs/002-quality-control-module/plan.md`](specs/002-quality-control-module/plan.md); ante cualquier diferencia, prevalece ese documento.
+
+# Plan de Trabajo: Módulo ERP de Control de Calidad (Quality Control)
 
 **Asignatura:** Modelación de Sistemas (580211) — Universidad de Concepción  
 **Grupo:** Grupo 08  

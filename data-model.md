@@ -1,3 +1,5 @@
+> **Documento histórico.** Este modelo conserva la propuesta inicial. La fuente de verdad vigente es [`specs/002-quality-control-module/data-model.md`](specs/002-quality-control-module/data-model.md); ante cualquier diferencia, prevalece ese documento.
+
 # Especificación del Modelo de Datos: Control de Calidad (Quality Control)
 
 **Módulo:** Control de Calidad  

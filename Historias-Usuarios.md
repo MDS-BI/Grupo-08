@@ -1,3 +1,5 @@
+> **Documento fuente histórico.** Estas historias se reflejan y detallan en [`specs/002-quality-control-module/spec.md`](specs/002-quality-control-module/spec.md). Ante cualquier diferencia de terminología o criterios, prevalece la especificación vigente.
+
 Historias Usuarios
 US-01: Visualización de Lotes Pendientes
 Historia de Usuario: Como inspector de calidad, quiero visualizar una tabla con todos los lotes de producción en estado "Pendiente de Revisión" para identificar rápidamente qué productos debo inspeccionar en mi turno.
