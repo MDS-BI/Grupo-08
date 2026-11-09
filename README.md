@@ -163,8 +163,47 @@ All tailoring lives in one place: the `userConfig` object at the top of `src/mod
 
 If the configuration is invalid (unknown types, bad keys, transitions referencing unknown statuses, non-hex accent colors), the app shows the problems in a banner and falls back to defaults instead of breaking.
 
+## Quality Control Module
+
+The quality module extends the base workspace with inspection plans, lot inspections, non-conformances, CAPA actions, a management dashboard, and an audit history.
+
+### Flow
+
+1. Create an inspection plan for a product and stage, then add at least one criterion.
+2. Open a pending lot (goods receipt, production order, or shipment) and start an inspection.
+3. Enter measurements. The pure engine calculates `pass_fail` and `overall_result`; incomplete measurements keep the inspection in `draft`.
+4. A failed inspection automatically creates an open non-conformance with severity `major` and defect type `other`.
+5. Register a CAPA action with responsible employee, root cause, action type, and due date. Overdue actions are flagged without changing their stored status.
+6. Review conditional inspections, override verdicts with justification, and track quarantined lots.
+7. Consult the dashboard for approval rate, open non-conformances, overdue CAPA, effectiveness, pending inspections, and Pareto rankings.
+8. Audit inspections in the history view by lot, module, and date range.
+
+### Seed data
+
+`src/seed-data.js` provides products, employees, goods receipts, production orders, and shipments. `ensureSeedData()` loads them into localStorage on application boot when missing.
+
+### Canonical values
+
+- Inspection status: `draft`, `completed`.
+- Inspection result: `passed`, `failed`, `conditional`.
+- Applicable stages: `incoming`, `in_process`, `final`.
+- Comparison types: `range`, `min`, `max`, `boolean`.
+- Non-conformance status: `open`, `under_review`, `closed`.
+- CAPA status: `pending`, `completed`; action types: `resampling`, `rework`, `other`.
+- Reference modules: `goods_receipt`, `production_order`, `shipment`.
+
+### Integrity rules
+
+- Plans and criteria with historical inspections are locked; duplicate the plan to create a new version.
+- Inspections with an associated non-conformance cannot be deleted.
+- Deleting a non-conformance cascades to its CAPA actions.
+- `passed` cannot be set manually when a critical criterion failed or was not measured.
+- Overrides record justification, authorizing user, and timestamp.
+- A lot appears in quarantine while it has an open non-conformance; the label becomes “Cuarentena - En tratamiento” when CAPA exists.
+
 ## Notes
 
 - Data is persisted to `localStorage` under the keys `erp_base_module:entities` and `erp_base_module:documents`.
+- Quality collections use the `erp_quality:` prefix for plans, criteria, inspections, results, non-conformances, and corrective actions.
 - Deleting an entity also deletes its documents (cascade).
 - This project intentionally uses vanilla HTML, CSS, and JavaScript for simplicity.

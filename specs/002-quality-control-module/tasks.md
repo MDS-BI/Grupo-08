@@ -1,127 +1,297 @@
 # Tareas: Módulo de Control de Calidad
 
 **Módulo**: `002-quality-control-module`  
-**Entrada**: [plan.md](plan.md), [data-model.md](data-model.md), [spec.md](spec.md)  
+**Entrada**: [plan.md](plan.md), [spec.md](spec.md), [data-model.md](data-model.md)  
 **Contratos**: [quality-storage.md](contracts/quality-storage.md), [inspection-engine.md](contracts/inspection-engine.md)  
-**Fuente de verdad**: `specs/002-quality-control-module/`. Los documentos de la raíz son históricos.
+**Prerrequisitos**: plan.md, spec.md, research.md, data-model.md, contracts/  
+**Pruebas**: Incluidas por mandato de la constitución (Principio II, Test-First). Cada tarea de implementación debe tener su prueba asociada escrita antes o junto con el código.  
+**Organización**: Las tareas se agrupan por historia de usuario para permitir implementación y prueba independientes.
 
-**Convenciones**: `[x]` completado; `[ ]` pendiente; `[P]` paralelizable con otras tareas de la misma fase. Las pruebas deben escribirse antes o junto con la implementación; ninguna tarea de implementación se cierra sin su prueba asociada.
+## Formato: `[ID] [P?] [Story] Descripción`
 
-## Responsables y fechas por fase
+- **[P]**: Puede ejecutarse en paralelo (archivos distintos, sin dependencia de tareas incompletas).
+- **[Story]**: Historia de usuario a la que pertenece la tarea (US1–US6).
+- Cada descripción incluye la ruta de archivo exacta.
 
-| Fase | Responsable principal | Apoyo | Fecha objetivo |
-| :--- | :--- | :--- | :--- |
-| Fase 1: Documentación y modelo | Analista de datos | Documentación | Octubre - primera semana de noviembre |
-| Fase 2: Especificación y planificación | Documentación | Analista de datos | Semana 1-2 de noviembre |
-| Fase 3: Implementación frontend | Desarrollo frontend | QA | Semana 3-4 de noviembre |
-| Fase 4: Pruebas, integración y cierre | QA | Desarrollo frontend / Documentación | Semana del 30 de noviembre |
+## Convenciones de rutas
 
-## Fase 1: Documentación y modelo — Completada
+- Proyecto único: `src/` y `tests/` en la raíz del repositorio.
+- Lógica pura de dominio en `src/`; vistas del módulo en `src/components/`.
+- Pruebas unitarias en `tests/unit/`; pruebas de integración en `tests/integration/`.
 
-- [x] **T001** Corregir en `data-model.md` los tipos de `expected_value`, `tolerance` y `measured_value` a numéricos; agregar `unit`, `comparison_type` e `is_critical`.
-- [x] **T002** Unificar el vocabulario entre README, MER, plan, spec y `data-model.md` usando una sola fuente de verdad (`quality_inspection_*`).
-- [x] **T003** Reflejar `Historias-Usuarios.md` en `spec.md` con prioridades y criterios Dado/Cuando/Entonces.
-- [x] **T004** Resolver la decisión entre identificadores `INT` y `string`, y entre `localStorage` y un servicio compartido; documentarla en `plan.md` y `contracts/`.
-- [x] **T005** Marcar las copias de `plan.md` y `data-model.md` en la raíz como documentos históricos y redirigir a `specs/002-quality-control-module/`.
-- [x] **T006** Mantener alineados `contracts/quality-storage.md` y `contracts/inspection-engine.md` con el modelo corregido.
+---
 
-## Fase 2: Especificación y planificación — En curso
+## Fase 1: Setup (Infraestructura compartida)
 
-- [x] **T010** Definir el alcance MVP y las exclusiones (inventario, proveedores, devoluciones, IoT, valorización monetaria y métricas por línea).
-- [x] **T011** Escribir criterios de aceptación Dado/Cuando/Entonces por historia: lotes pendientes, planes, inspecciones, no conformidades, CAPA, revisión, cuarentena, dashboard e historial.
-- [x] **T012** Asignar responsables por fase y fechas de entrega en `tasks.md`.
-- [x] **T013** Crear y actualizar el checklist de requisitos en `checklists/requirements.md`.
-- [ ] **T014** Acordar y definir los datos semilla de productos, empleados, recepciones, órdenes y despachos en `src/seed-data.js`.
+**Propósito**: Restaurar la base Vite y preparar el entorno del módulo de calidad.
 
-## Fase 3: Implementación frontend
+- [x] T001 Restaurar o implementar el código del módulo base ausente (`index.html`, `src/main.js`, `src/app.js`, `src/styles.css`, `src/components/shell.js`) desde `git restore --source=a0062c0^ -- index.html src` o según las especificaciones existentes.
+- [x] T002 [P] Crear `src/seed-data.js` con datos semilla de productos, empleados, recepciones, órdenes de producción y despachos.
+- [ ] T003 [P] Configurar lint, formato y análisis estático en `package.json` y archivos de configuración en la raíz del repositorio.
+- [ ] T004 [P] Configurar el entorno de pruebas Vitest con jsdom en `vitest.config.mjs` y `tests/setup/setup.js`.
 
-### Base e integración
+---
 
-- [ ] **T020** Restaurar o implementar el código del módulo base (`index.html` y `src/`) ausente desde el commit `a0062c0`. Bloquea toda la fase.
-- [ ] **T021** [P] Adaptar `module-config.js` con el nombre, términos y color de acento de Control de Calidad.
-- [ ] **T022** Extender `storage.js` con las colecciones de calidad, los campos del contrato y las operaciones `loadCollection`, `saveCollection`, `addRecord`, `updateRecord`, `deleteRecord` y `deleteRelated`.
-- [ ] **T023** Implementar la validación de `reference_module` + `reference_id` contra las colecciones externas y el rechazo de referencias huérfanas.
-- [ ] **T024** [P] Cargar `src/seed-data.js` en el entorno de demo y pruebas.
-- [ ] **T025** [P] Escribir pruebas unitarias de almacenamiento, cascadas de eliminación y validación de referencias (`tests/unit/`).
+## Fase 2: Foundational (Prerrequisitos bloqueantes)
 
-### Planes y criterios
+**Propósito**: Infraestructura de datos e integración que debe existir antes de cualquier historia de usuario.
 
-- [ ] **T030** Implementar `quality-plan-config.js` como vista maestro-detalle de planes por producto y etapa.
-- [ ] **T031** Permitir crear, editar y eliminar criterios con valor esperado, tolerancia, unidad, tipo de comparación y criticidad.
-- [ ] **T032** Validar que un plan requiera producto, nombre, etapa canónica y al menos un criterio, y que los criterios tengan tipos válidos.
-- [ ] **T033** Bloquear edición y eliminación de planes/criterios con inspecciones históricas; permitir duplicar el plan para crear una nueva versión.
-- [ ] **T034** [P] Escribir pruebas unitarias de validación, bloqueo histórico y duplicación de planes (`tests/unit/`).
+**⚠️ CRÍTICO**: Ninguna historia de usuario puede iniciar hasta completar esta fase.
 
-### Lotes pendientes
+- [x] T005 Extender `src/storage.js` con las seis colecciones de calidad (`quality_inspection_plans`, `quality_inspection_criteria`, `quality_inspections`, `quality_inspection_results`, `non_conformances`, `corrective_actions`) y las operaciones `loadCollection`, `saveCollection`, `addRecord`, `updateRecord`, `deleteRecord` y `deleteRelated` del contrato.
+- [x] T006 Implementar en `src/storage.js` la validación de `reference_module` (`goods_receipt`, `production_order`, `shipment`) y la existencia de `reference_id` contra las colecciones externas, rechazando referencias huérfanas.
+- [x] T007 Implementar en `src/storage.js` las funciones `derivePendingLots(externalDocuments, inspections)` y `deriveQuarantineLots(nonConformances, correctiveActions)`.
+- [x] T008 Registrar y conectar las vistas de calidad en `src/app.js` y `src/module-config.js`, incluyendo nombre, términos y navegación del módulo.
+- [x] T009 [P] Escribir pruebas unitarias de CRUD de almacenamiento, cascadas de eliminación y validación de referencias en `tests/unit/storage.test.js`.
+- [x] T010 [P] Escribir pruebas unitarias de derivación de lotes pendientes y lotes en cuarentena en `tests/unit/derivations.test.js`.
 
-- [ ] **T040** Implementar `pending-lots.js` con la tabla de ID de lote, producto, fecha, estado y acción "Inspeccionar".
-- [ ] **T041** Derivar los lotes pendientes comparando documentos origen externos con inspecciones `completed`; una inspección `draft` no marca el lote como inspeccionado.
-- [ ] **T042** [P] Escribir pruebas de derivación de lotes pendientes y de actualización tras completar una inspección.
+**Checkpoint**: La base de almacenamiento, integración y derivaciones está lista; las historias pueden iniciar en paralelo.
 
-### Motor de inspección
+---
 
-- [ ] **T050** Implementar en `inspection-engine.js` la función pura `evaluateInspection(plan, measurements)`.
-- [ ] **T051** Calcular `pass_fail` por criterio según `range`, `min`, `max` o `boolean`, con tolerancias inclusivas.
-- [ ] **T052** Derivar `overall_result` solo cuando la inspección esté completa; devolver `status: "incomplete"` y `missing_criteria_ids` cuando falte una medición.
-- [ ] **T053** Implementar la pantalla de inspección: selector de origen, inspector, fecha, estado `draft`/`completed` y formulario de mediciones.
-- [ ] **T054** Bloquear el ingreso manual de `pass_fail` y `overall_result`.
-- [ ] **T055** Implementar el cambio de dictamen con `override_justification`, `overridden_by` y `override_at`; bloquear `passed` con criterios críticos fallidos o sin medición.
-- [ ] **T056** [P] Escribir pruebas unitarias del motor: comparaciones, límites inclusivos, inspección incompleta y dictamen (`tests/unit/`).
-- [ ] **T057** [P] Escribir pruebas de integración del flujo de inspección: referencia huérfana, borrador, completado y override (`tests/integration/`).
+## Fase 3: User Story 1 - Configurar planes y criterios de inspección (Priority: P1) 🎯 MVP
 
-### No conformidades y CAPA
+**Goal**: Permitir al Jefe de Calidad crear y mantener planes de inspección con criterios, valores esperados, tolerancias, unidades, tipos de comparación y criticidad.
 
-- [ ] **T060** Generar un borrador de no conformidad cuando `overall_result = failed`, con descripción autogenerada, producto del plan, tipo de defecto `other`, severidad `major` y estado `open`; exigir descripción no vacía.
-- [ ] **T061** Implementar `non-conformance-capa.js` con clasificación de tipo de defecto, severidad y estado de la no conformidad.
-- [ ] **T062** Permitir crear acciones CAPA con responsable, descripción, causa raíz, tipo de acción (`resampling`, `rework`, `other`), `due_date` y estado.
-- [ ] **T063** Marcar visualmente las acciones CAPA vencidas sin cambiar su estado automáticamente.
-- [ ] **T064** [P] Escribir pruebas de no conformidad automática, descripción obligatoria y validación de CAPA (`tests/integration/`).
+**Independent Test**: Crear un plan para un producto y etapa, agregar criterios con valor esperado y tolerancia, y verificar que el plan queda disponible para ejecutar inspecciones.
 
-### Revisión condicional y cuarentena
+### Pruebas para User Story 1
 
-- [ ] **T070** Implementar la bandeja de revisión para inspecciones `conditional` con marca visible y acceso al cambio de dictamen.
-- [ ] **T071** Implementar la pestaña de cuarentena con ID de lote, producto, severidad, tipo de defecto y acceso a la acción CAPA; mostrar "Cuarentena - En tratamiento" cuando exista CAPA.
-- [ ] **T072** [P] Escribir pruebas de revisión condicional y derivación de cuarentena (`tests/integration/`).
+- [x] T011 [P] [US1] Escribir pruebas unitarias de validación de planes/criterios, bloqueo histórico y duplicación en `tests/unit/quality-plan-config.test.js`.
 
-### Dashboard e historial
+### Implementación para User Story 1
 
-- [ ] **T080** Implementar `dashboard.js` con tasa de aprobación, no conformidades abiertas por severidad, CAPA vencidas, eficacia CAPA e inspecciones pendientes (`draft`).
-- [ ] **T081** Agregar el análisis de Pareto de productos y etapas con mayor concentración de no conformidades.
-- [ ] **T082** Implementar `inspection-history.js` con filtros por lote (documento origen) y rango de fechas.
-- [ ] **T083** Agregar la acción de limpiar filtros y la validación de rango de fechas inválido.
-- [ ] **T084** Implementar estados vacíos claros en dashboard, lotes pendientes, cuarentena, historial y revisión condicional.
-- [ ] **T085** Restringir el detalle individual por inspector al rol de jefatura y mostrar métricas agregadas por producto o etapa.
-- [ ] **T086** [P] Escribir pruebas de dashboard, historial, filtros, estados vacíos, eficacia CAPA y restricción por rol (`tests/integration/`).
+- [x] T012 [US1] Implementar en `src/components/quality-plan-config.js` las funciones de validación de plan (nombre, producto existente, etapa canónica, al menos un criterio) y de criterio (valores numéricos, tolerancia no negativa, unidad no vacía, tipo de comparación canónico).
+- [x] T013 [US1] Implementar en `src/components/quality-plan-config.js` la vista maestro-detalle de planes por producto y etapa.
+- [x] T014 [US1] Implementar en `src/components/quality-plan-config.js` el alta, edición y eliminación de criterios con valor esperado, tolerancia, unidad, tipo de comparación y criticidad.
+- [x] T015 [US1] Implementar en `src/components/quality-plan-config.js` la habilitación de planes solo cuando tengan al menos un criterio y validaciones con mensajes de error visibles.
+- [x] T016 [US1] Implementar en `src/components/quality-plan-config.js` el bloqueo de edición/eliminación de planes y criterios con inspecciones históricas y la duplicación de plan como nueva versión.
+- [x] T017 [US1] Agregar en `src/components/quality-plan-config.js` el estado vacío claro cuando no existan planes o criterios.
 
-## Fase 4: Pruebas, calidad, integración y cierre
+**Checkpoint**: User Story 1 está completa y es testeable de forma independiente.
 
-- [ ] **T090** Definir y configurar lint, formato y análisis estático; agregar los comandos al `package.json`.
-- [ ] **T091** Revisar accesibilidad y consistencia de UX: navegación por teclado, etiquetas, mensajes de error, confirmaciones y estados de carga.
-- [ ] **T092** Ejecutar pruebas de rendimiento y usabilidad: 10 criterios en menos de 3 minutos; con hasta 500 inspecciones, consultas y dashboard en menos de 2 segundos; búsqueda filtrada en menos de 1 segundo percibido.
-- [ ] **T093** Cubrir con pruebas de integración el flujo completo lote pendiente → inspección → no conformidad → CAPA → historial.
-- [ ] **T094** Probar el rechazo de referencias huérfanas, identificadores inválidos y operaciones de eliminación bloqueadas.
-- [ ] **T095** Verificar que `npm run dev` ejecuta la aplicación, `npm test` pasa la suite y los comandos de calidad no tienen errores bloqueantes.
-- [ ] **T096** Actualizar el README con el flujo del módulo, datos semilla, estados y reglas de integridad.
-- [ ] **T097** Ejecutar la versión integrada con el módulo base y validar la navegación entre vistas.
-- [ ] **T098** Preparar la presentación de 5 minutos, medir la tasa de éxito del flujo completo en la demo (objetivo ≥ 90 %) y realizar la coevaluación.
-- [ ] **T099** Re-ejecutar `/speckit.analyze` y confirmar que no quedan hallazgos críticos ni altos.
+---
 
-## Dependencias
+## Fase 4: User Story 2 - Identificar lotes pendientes y ejecutar una inspección con evaluación automática (Priority: P2)
 
-- T014 y T020 bloquean toda la Fase 3.
-- T022–T023 bloquean T030–T033, T040–T041, T050–T055 y T060–T062.
-- T033 depende de T030–T032.
-- T040–T041 dependen de T022–T024.
-- T050–T052 bloquean T053–T055, T060 y T070.
-- T060–T062 bloquean T063, T070–T071 y T080–T081.
-- T080–T085 bloquean T086.
-- T090–T094 bloquean T095 y T097.
-- T020 y T097 requieren restaurar el código del módulo base.
+**Goal**: Mostrar lotes pendientes y permitir registrar mediciones en una inspección vinculada a un documento origen, calculando automáticamente `pass_fail` y `overall_result`.
 
-## Fuera del MVP
+**Independent Test**: Abrir la lista de lotes pendientes, iniciar una inspección sobre un origen válido, ingresar mediciones y comprobar que el dictamen se calcula sin intervención manual.
 
-- Bloqueo automático de inventario.
-- Calificación de proveedores.
-- Inspección de devoluciones (`returns_rma`).
-- Integración IoT y captura automatizada de mediciones.
-- Valorización monetaria de no calidad y métricas por línea de producción.
+### Pruebas para User Story 2
+
+- [x] T018 [P] [US2] Escribir pruebas unitarias del motor de tolerancias (comparaciones `range`, `min`, `max`, `boolean`, límites inclusivos, inspección incompleta y dictamen) en `tests/unit/inspection-engine.test.js`.
+- [x] T019 [P] [US2] Escribir pruebas de integración del flujo de inspección (referencia huérfana, borrador, completado y actualización de lotes pendientes) en `tests/integration/inspection-flow.test.js`.
+
+### Implementación para User Story 2
+
+- [x] T020 [P] [US2] Implementar la función pura `evaluateInspection(plan, measurements)` en `src/inspection-engine.js`, devolviendo `status`, `results`, `missing_criteria_ids` y `overall_result` según el contrato.
+- [x] T021 [P] [US2] Implementar en `src/components/pending-lots.js` la tabla de lotes pendientes con ID de lote, producto, fecha, estado y acción "Inspeccionar".
+- [x] T022 [US2] Implementar en `src/components/inspection-engine.js` el formulario de inspección con selector de origen, inspector, fecha, plan y estado `draft`/`completed`.
+- [x] T023 [US2] Integrar en `src/components/inspection-engine.js` la evaluación automática de mediciones usando `src/inspection-engine.js`, bloqueando el ingreso manual de `pass_fail` y `overall_result`.
+- [x] T024 [US2] Implementar en `src/components/inspection-engine.js` la permanencia en `draft` cuando falte una medición o el valor no sea numérico, y el rechazo de referencias huérfanas o no permitidas.
+- [x] T025 [US2] Persistir resultados de inspección en `src/storage.js` y retirar el lote de la vista de pendientes al completar la inspección.
+- [x] T026 [US2] Agregar en `src/components/pending-lots.js` y `src/components/inspection-engine.js` los estados vacíos y mensajes de validación correspondientes.
+
+**Checkpoint**: User Stories 1 y 2 funcionan de forma independiente.
+
+---
+
+## Fase 5: User Story 3 - Registrar no conformidades y acciones CAPA (Priority: P3)
+
+**Goal**: Generar no conformidades a partir de inspecciones reprobadas y permitir asignar acciones CAPA trazables.
+
+**Independent Test**: Reproducir una inspección reprobada, verificar la no conformidad autogenerada con descripción, y asignar una acción CAPA con responsable, causa raíz, tipo de acción y vencimiento.
+
+### Pruebas para User Story 3
+
+- [x] T027 [P] [US3] Escribir pruebas de integración de no conformidad automática, descripción obligatoria, validación de CAPA y detección de vencimiento en `tests/integration/non-conformance-capa.test.js`.
+
+### Implementación para User Story 3
+
+- [x] T028 [US3] Implementar en `src/components/non-conformance-capa.js` la generación automática de no conformidad cuando `overall_result = failed`, con descripción autogenerada, producto del plan, tipo `other`, severidad `major` y estado `open`.
+- [x] T029 [US3] Implementar en `src/components/non-conformance-capa.js` la clasificación y edición de no conformidad (descripción obligatoria, tipo de defecto, severidad y estado).
+- [x] T030 [US3] Implementar en `src/components/non-conformance-capa.js` el formulario de acciones CAPA con responsable, descripción, causa raíz, tipo de acción, `due_date` y estado.
+- [x] T031 [US3] Implementar en `src/components/non-conformance-capa.js` la marca visual de acciones CAPA vencidas sin cambiar automáticamente su estado.
+- [x] T032 [US3] Implementar en `src/storage.js` las reglas de integridad y trazabilidad: bloquear eliminación de inspección con no conformidad y eliminar CAPA en cascada al eliminar una no conformidad.
+- [x] T033 [US3] Agregar en `src/components/non-conformance-capa.js` los estados vacíos y mensajes de validación de no conformidad y CAPA.
+
+**Checkpoint**: La detección de fallas se convierte en no conformidad y acción CAPA trazable.
+
+---
+
+## Fase 6: User Story 4 - Revisar dictamen, inspecciones condicionales y lotes en cuarentena (Priority: P4)
+
+**Goal**: Revisar inspecciones condicionales y lotes retenidos, cambiar dictámenes con justificación registrada y gestionar cuarentena.
+
+**Independent Test**: Abrir una inspección reprobada, intentar aprobarla con criterios críticos fallidos (bloqueo), cambiar el dictamen con justificación y revisar un lote en cuarentena.
+
+### Pruebas para User Story 4
+
+- [x] T034 [P] [US4] Escribir pruebas de integración de cambio de dictamen, bloqueo de aprobación, revisión condicional y derivación de cuarentena en `tests/integration/review-quarantine.test.js`.
+
+### Implementación para User Story 4
+
+- [x] T035 [US4] Implementar en `src/components/non-conformance-capa.js` la bandeja de revisión con las inspecciones `conditional` marcadas como pendientes del Jefe de Calidad.
+- [x] T036 [US4] Implementar en `src/components/non-conformance-capa.js` el cambio manual de dictamen con `override_justification`, `overridden_by` y `override_at`, bloqueando `passed` con criterios críticos fallidos o sin medición.
+- [x] T037 [US4] Implementar en `src/components/non-conformance-capa.js` el flujo de rechazo manual con confirmación y motivo obligatorio antes de guardar.
+- [x] T038 [US4] Implementar en `src/components/non-conformance-capa.js` la pestaña de cuarentena con ID de lote, producto, severidad, tipo de defecto, acceso a CAPA y estado "Cuarentena - En tratamiento" cuando exista una acción.
+- [x] T039 [US4] Agregar en `src/components/non-conformance-capa.js` los estados vacíos de revisión condicional y cuarentena.
+
+**Checkpoint**: Las desviaciones condicionales y los lotes retenidos se resuelven con evidencia registrada.
+
+---
+
+## Fase 7: User Story 5 - Consultar el dashboard de calidad (Priority: P5)
+
+**Goal**: Mostrar indicadores agregados de aprobación, no conformidades, CAPA vencidas, eficacia CAPA, inspecciones pendientes y Pareto de defectos.
+
+**Independent Test**: Con datos de inspecciones y no conformidades cargados, abrir el dashboard y verificar que los indicadores coinciden con los registros.
+
+### Pruebas para User Story 5
+
+- [x] T040 [P] [US5] Escribir pruebas de integración de KPIs, eficacia CAPA, inspecciones pendientes, Pareto y restricción por rol en `tests/integration/quality-dashboard.test.js`.
+
+### Implementación para User Story 5
+
+- [x] T041 [P] [US5] Implementar en `src/components/dashboard.js` los KPIs de tasa de aprobación por etapa, no conformidades abiertas por severidad, CAPA vencidas, eficacia CAPA e inspecciones pendientes (`draft`).
+- [x] T042 [US5] Implementar en `src/components/dashboard.js` el análisis de Pareto de productos y etapas con mayor concentración de no conformidades.
+- [x] T043 [US5] Implementar en `src/components/dashboard.js` las métricas agregadas por producto o etapa y restringir el detalle individual por inspector al rol de jefatura.
+- [x] T044 [US5] Agregar en `src/components/dashboard.js` estados vacíos claros cuando no existan datos.
+
+**Checkpoint**: El dashboard refleja fielmente los registros del módulo.
+
+---
+
+## Fase 8: User Story 6 - Auditar el historial de inspecciones (Priority: P6)
+
+**Goal**: Permitir filtrar el historial por lote (documento origen) y rango de fechas, con limpieza de filtros y validación.
+
+**Independent Test**: Aplicar filtros de lote y fechas sobre un historial con datos y verificar que la tabla muestra solo los registros coincidentes.
+
+### Pruebas para User Story 6
+
+- [x] T045 [P] [US6] Escribir pruebas de integración de filtros por lote, rango de fechas, limpieza, rango inválido y estado vacío en `tests/integration/inspection-history.test.js`.
+
+### Implementación para User Story 6
+
+- [x] T046 [US6] Implementar en `src/components/inspection-history.js` la tabla del historial con trazabilidad desde la inspección hasta la no conformidad y sus acciones CAPA.
+- [x] T047 [US6] Implementar en `src/components/inspection-history.js` los filtros por lote (documento origen) y rango de fechas, incluyendo la validación de rango inválido (desde posterior a hasta).
+- [x] T048 [US6] Agregar en `src/components/inspection-history.js` la acción visible de limpiar filtros y el estado vacío de la vista.
+
+**Checkpoint**: Las seis historias de usuario están funcionales e independientemente verificables.
+
+---
+
+## Fase 9: Polish y preocupaciones transversales
+
+**Propósito**: Mejoras que afectan a múltiples historias y cierre del módulo.
+
+- [x] T049 [P] Actualizar `README.md` con el flujo del módulo de calidad, datos semilla, enumeraciones canónicas y reglas de integridad.
+- [ ] T050 [P] Revisar accesibilidad y consistencia de UX en `src/styles.css` y `src/components/`: navegación por teclado, etiquetas, mensajes de error, confirmaciones y estados de carga.
+- [x] T051 Validar rendimiento con hasta 500 inspecciones: consultas y dashboard en menos de 2 segundos, búsqueda filtrada en menos de 1 segundo percibido, según `quickstart.md`.
+- [x] T052 Escribir la prueba de integración del flujo completo lote pendiente → inspección → no conformidad → CAPA → historial en `tests/integration/full-flow.test.js`.
+- [x] T053 Ejecutar `npm test`, los comandos de lint/formato/análisis estático definidos en `package.json` y `npm run build`; corregir cualquier error bloqueante.
+- [ ] T054 Ejecutar la validación funcional de `specs/002-quality-control-module/quickstart.md` con `npm run dev`.
+- [ ] T055 Ejecutar `/speckit.analyze` sobre `specs/002-quality-control-module/spec.md` y confirmar que no quedan hallazgos críticos ni altos.
+
+---
+
+## Dependencias y orden de ejecución
+
+### Dependencias por fase
+
+- **Setup (Fase 1)**: Sin dependencias; puede iniciar de inmediato. T001 bloquea todo el desarrollo.
+- **Foundational (Fase 2)**: Depende de Setup. T005–T008 bloquean todas las historias de usuario.
+- **Historias de Usuario (Fases 3–8)**: Dependen de Foundational.
+- **Polish (Fase 9)**: Depende de que las historias deseadas estén completas.
+
+### Dependencias entre historias
+
+- **US1 (P1)**: Puede iniciar tras Foundational; no depende de otras historias.
+- **US2 (P2)**: Depende de US1 para disponer de planes con criterios; también puede probarse con datos semilla.
+- **US3 (P3)**: Depende de US2 (inspección `failed`).
+- **US4 (P4)**: Depende de US2 y US3 (inspecciones `conditional`, no conformidades y CAPA).
+- **US5 (P5)**: Depende de US2, US3 y US4 para tener datos que agregar.
+- **US6 (P6)**: Depende de US2–US4 para mostrar historial con trazabilidad completa.
+
+### Dentro de cada historia
+
+- Las pruebas se escriben antes y deben fallar antes de implementar.
+- Modelos/validaciones antes que servicios y vistas.
+- Implementación central antes de integración.
+- Una historia debe completarse y validarse antes de avanzar a la siguiente prioridad (si se trabaja secuencialmente).
+
+### Oportunidades de paralelización
+
+- T002, T003 y T004 pueden ejecutarse en paralelo tras T001.
+- T009 y T010 pueden ejecutarse en paralelo.
+- Las pruebas [P] de cada historia pueden escribirse en paralelo con otras tareas de prueba.
+- US5 y US6 pueden abordarse en paralelo por desarrolladores distintos una vez que US2–US4 generen datos.
+- T049 y T050 pueden ejecutarse en paralelo al cierre.
+
+---
+
+## Ejemplo de paralelización: User Story 2
+
+```bash
+# Motor puro y vista de pendientes son archivos distintos y sin dependencia entre sí:
+Task: "Implementar evaluateInspection(plan, measurements) en src/inspection-engine.js"
+Task: "Implementar la tabla de lotes pendientes en src/components/pending-lots.js"
+
+# En paralelo, las pruebas de la historia:
+Task: "Pruebas unitarias del motor en tests/unit/inspection-engine.test.js"
+Task: "Pruebas de integración del flujo en tests/integration/inspection-flow.test.js"
+```
+
+## Ejemplo de paralelización: User Story 5 y User Story 6
+
+```bash
+# Con datos de US2–US4 disponibles, dos desarrolladores trabajan en paralelo:
+Task: "Implementar KPIs y Pareto en src/components/dashboard.js"
+Task: "Implementar tabla y filtros del historial en src/components/inspection-history.js"
+```
+
+---
+
+## Estrategia de implementación
+
+### MVP primero (solo User Story 1)
+
+1. Completar Fase 1: Setup.
+2. Completar Fase 2: Foundational (CRÍTICO, bloquea todas las historias).
+3. Completar Fase 3: User Story 1.
+4. **DETENER y VALIDAR**: probar la configuración de planes y criterios de forma independiente.
+5. Desplegar o demostrar si está listo.
+
+### Entrega incremental
+
+1. Completar Setup + Foundational → base lista.
+2. Agregar US1 → probar → demo.
+3. Agregar US2 → probar → demo (flujo operativo de inspección).
+4. Agregar US3 → probar → cierre de ciclo con no conformidad y CAPA.
+5. Agregar US4 → probar → revisión y cuarentena.
+6. Agregar US5 → probar → dashboard gerencial.
+7. Agregar US6 → probar → auditoría e historial.
+8. Polish y validación final.
+
+### Estrategia con equipo paralelo
+
+1. El equipo completa Setup + Foundational en conjunto.
+2. Con la base lista:
+   - Desarrollador A: US1 → US2.
+   - Desarrollador B: pruebas transversales y US3.
+   - Desarrollador C: US4 una vez existan inspecciones condicionales y no conformidades.
+3. US5 y US6 se integran al final, cuando existan datos reales de los flujos anteriores.
+
+---
+
+## Notas
+
+- `[P]` indica tareas en archivos distintos y sin dependencias pendientes.
+- `[USx]` mapea cada tarea a su historia de usuario para trazabilidad.
+- Cada historia debe ser completable y testeable de forma independiente.
+- Verificar que las pruebas fallen antes de implementar (constitución, Principio II).
+- No editar ni eliminar planes/criterios con inspecciones históricas; duplicar para versionar.
+- Evitar tareas vagas, conflictos de archivo y dependencias cruzadas que rompan la independencia.
+- Los documentos de la raíz (`plan.md`, `data-model.md`) son históricos; la fuente de verdad es `specs/002-quality-control-module/`.

@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Módulo Base ERP</title>
+  </head>
+  <body>
+    <div id="config-errors" class="config-error" role="alert" hidden></div>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="brand">
+          <span id="logo-mark" class="logo-mark" aria-hidden="true"></span>
+          <span id="brand-name" class="brand-name">Módulo Base ERP</span>
+        </div>
+      </header>
+
+      <aside class="sidebar">
+        <nav class="side-nav" aria-label="Módulos">
+          <button type="button" class="nav-module active" data-module="dashboard" id="nav-dashboard" aria-current="page">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1"></rect><rect x="11" y="3" width="6" height="6" rx="1"></rect><rect x="3" y="11" width="6" height="6" rx="1"></rect><rect x="11" y="11" width="6" height="6" rx="1"></rect></svg>
+            <span class="nav-label" id="nav-dashboard-label">Panel</span>
+          </button>
+          <button type="button" class="nav-module" data-module="entities" id="nav-entities">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.5 3.5 6v8L10 17.5 16.5 14V6L10 2.5z"></path><path d="M3.5 6 10 9.5 16.5 6"></path><path d="M10 9.5v8"></path></svg>
+            <span class="nav-label" id="nav-entities-label">Entidades</span>
+          </button>
+          <button type="button" class="nav-module" data-module="documents" id="nav-documents">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 2.5h6l4 4v11h-10z"></path><path d="M11.5 2.5v4h4"></path><path d="M8 10h5"></path><path d="M8 13h5"></path></svg>
+            <span class="nav-label" id="nav-documents-label">Documentos</span>
+          </button>
+          <button type="button" class="nav-module" data-module="search" id="nav-search">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="5"></circle><path d="m12.8 12.8 4.2 4.2"></path></svg>
+            <span class="nav-label" id="nav-search-label">Búsqueda</span>
+          </button>
+
+          <div class="nav-divider" role="presentation"></div>
+          <span class="nav-group-label">Control de Calidad</span>
+
+          <button type="button" class="nav-quality active" data-quality="quality-dashboard" id="nav-quality-dashboard" aria-current="page">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15V5"></path><path d="M3 15h14"></path><path d="M6 15v-4"></path><path d="M10 15V7"></path><path d="M14 15v-6"></path></svg>
+            <span class="nav-label">Dashboard</span>
+          </button>
+          <button type="button" class="nav-quality" data-quality="pending-lots" id="nav-quality-lots">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="14" height="13" rx="2"></rect><path d="M6 8h8"></path><path d="M6 11h8"></path><path d="M6 14h5"></path></svg>
+            <span class="nav-label">Lotes pendientes</span>
+          </button>
+          <button type="button" class="nav-quality" data-quality="quality-plans" id="nav-quality-plans">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h10v14H5z"></path><path d="M8 7h4"></path><path d="M8 10h4"></path><path d="M8 13h2"></path></svg>
+            <span class="nav-label">Planes</span>
+          </button>
+          <button type="button" class="nav-quality" data-quality="inspections" id="nav-quality-inspections">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle><path d="m6.5 10 2.5 2.5 4.5-5"></path></svg>
+            <span class="nav-label">Inspecciones</span>
+          </button>
+          <button type="button" class="nav-quality" data-quality="non-conformance" id="nav-quality-nc">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.5 18 17H2z"></path><path d="M10 8v3.5"></path><path d="M10 14.2v.1"></path></svg>
+            <span class="nav-label">No conformidades</span>
+          </button>
+          <button type="button" class="nav-quality" data-quality="quality-history" id="nav-quality-history">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle><path d="M10 6v4l2.5 2"></path></svg>
+            <span class="nav-label">Historial</span>
+          </button>
+        </nav>
+      </aside>
+
+      <main class="content" id="app">
+        <section id="view-dashboard" aria-labelledby="dashboard-heading">
+          <h1 id="dashboard-heading">Módulo Base ERP</h1>
+          <p id="dashboard-subtitle" class="muted">Gestiona tus entidades y documentos en un solo lugar.</p>
+
+          <div class="stat-grid">
+            <div class="stat-card">
+              <span class="stat-value" id="stat-entities">0</span>
+              <span class="stat-label" id="stat-entities-label">Entidades</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="stat-documents">0</span>
+              <span class="stat-label" id="stat-documents-label">Documentos</span>
+            </div>
+          </div>
+
+          <h2 id="quick-actions-heading">Acciones rápidas</h2>
+          <div class="action-grid">
+            <button type="button" class="action-card" id="action-new-entity">
+              <strong id="action-new-entity-title">Nueva Entidad</strong>
+              <span class="muted" id="action-new-entity-sub">Crear un registro de entidad</span>
+            </button>
+            <button type="button" class="action-card" id="action-new-document">
+              <strong id="action-new-document-title">Nuevo Documento</strong>
+              <span class="muted" id="action-new-document-sub">Registrar un registro de documento</span>
+            </button>
+            <button type="button" class="action-card" id="action-open-entities">
+              <strong id="action-open-entities-title">Entidades</strong>
+              <span class="muted" id="action-open-entities-sub">Abrir la gestión de entidades</span>
+            </button>
+            <button type="button" class="action-card" id="action-find">
+              <strong id="action-find-title">Buscar registros</strong>
+              <span class="muted" id="action-find-sub">Buscar entidades</span>
+            </button>
+          </div>
+        </section>
+
+        <section id="view-entities" aria-labelledby="entities-view-heading" hidden>
+          <h1 id="entities-view-heading">Entidades</h1>
+
+          <section class="card" aria-labelledby="entity-form-heading">
+            <h2 id="entity-form-heading">Agregar / Editar Entidad</h2>
+            <form id="entity-form">
+              <input type="hidden" id="entity-id" />
+              <div>
+                <label for="name">Nombre *</label>
+                <input id="name" name="name" required />
+                <div class="error" id="error-name" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="code">Código *</label>
+                <input id="code" name="code" required />
+                <div class="error" id="error-code" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="taxId">Identificación fiscal</label>
+                <input id="taxId" name="taxId" />
+              </div>
+              <div>
+                <label for="email">Correo electrónico</label>
+                <input id="email" name="email" type="email" />
+                <div class="error" id="error-email" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="phone">Teléfono</label>
+                <input id="phone" name="phone" />
+              </div>
+              <div>
+                <label for="address">Dirección</label>
+                <input id="address" name="address" />
+              </div>
+              <div>
+                <label for="category">Categoría</label>
+                <input id="category" name="category" />
+              </div>
+              <div>
+                <label for="description">Descripción</label>
+                <textarea id="description" name="description" rows="3"></textarea>
+              </div>
+              <div>
+                <label for="targetDate">Fecha objetivo</label>
+                <input id="targetDate" name="targetDate" type="date" />
+                <div class="error" id="error-targetDate" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="creditLimit">Límite de crédito</label>
+                <input id="creditLimit" name="creditLimit" type="number" min="0" step="0.01" />
+                <div class="error" id="error-creditLimit" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="paymentTerms">Condiciones de pago</label>
+                <input id="paymentTerms" name="paymentTerms" placeholder="p. ej., contado, neto 30" />
+              </div>
+              <div id="entity-custom-fields"></div>
+              <div class="form-actions">
+                <button type="submit" id="submit-button" class="primary">Guardar</button>
+                <button type="button" id="cancel-edit" class="secondary" hidden>Cancelar edición</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="edit-entity-heading">
+            <h2 id="edit-entity-heading">Editar o eliminar la entidad</h2>
+            <div>
+              <label for="edit-entity">Selecciona una entidad</label>
+              <select id="edit-entity"></select>
+              <div class="error" id="error-edit-entity" aria-live="polite"></div>
+            </div>
+            <div class="form-actions">
+              <button type="button" id="delete-entity" class="danger">Eliminar la entidad seleccionada</button>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-documents" aria-labelledby="documents-view-heading" hidden>
+          <h1 id="documents-view-heading">Documentos</h1>
+
+          <section class="card" aria-labelledby="document-form-heading">
+            <h2 id="document-form-heading">Agregar / Editar Documento</h2>
+            <form id="document-form">
+              <input type="hidden" id="document-id" />
+              <input type="hidden" id="document-entity-id" />
+              <div>
+                <label for="document-entity">Entidad *</label>
+                <select id="document-entity" name="document-entity"></select>
+                <div class="error" id="error-document-entity" aria-live="polite"></div>
+              </div>
+              <div class="field-row">
+                <div>
+                  <label for="series">Serie</label>
+                  <input id="series" name="series" placeholder="p. ej., FAC" />
+                </div>
+                <div>
+                  <label for="folio">Folio *</label>
+                  <input id="folio" name="folio" type="number" min="1" step="1" required />
+                  <div class="error" id="error-folio" aria-live="polite"></div>
+                </div>
+              </div>
+              <div>
+                <label for="startDate">Fecha de inicio *</label>
+                <input id="startDate" name="startDate" type="date" required />
+                <div class="error" id="error-startDate" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="endDate">Fecha de fin *</label>
+                <input id="endDate" name="endDate" type="date" required />
+                <div class="error" id="error-endDate" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="quantity">Cantidad</label>
+                <input id="quantity" name="quantity" type="number" min="1" step="1" />
+                <div class="error" id="error-quantity" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="subtotal">Subtotal</label>
+                <input id="subtotal" name="subtotal" type="number" min="0" step="0.01" />
+                <div class="error" id="error-subtotal" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="discount">Descuento</label>
+                <input id="discount" name="discount" type="number" min="0" step="0.01" />
+                <div class="error" id="error-discount" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="taxAmount">Impuesto</label>
+                <input id="taxAmount" name="taxAmount" type="number" min="0" step="0.01" />
+                <div class="error" id="error-taxAmount" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="totalAmount">Importe total</label>
+                <input id="totalAmount" name="totalAmount" type="number" min="0" step="0.01" />
+                <div class="error" id="error-totalAmount" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="currency">Moneda</label>
+                <input id="currency" name="currency" placeholder="p. ej., MXN" />
+              </div>
+              <div>
+                <label for="docPaymentTerms">Condiciones de pago</label>
+                <input id="docPaymentTerms" name="docPaymentTerms" placeholder="p. ej., contado, neto 30" />
+              </div>
+              <div>
+                <label for="notes">Notas</label>
+                <textarea id="notes" name="notes" rows="2"></textarea>
+              </div>
+              <div id="document-status-control"></div>
+              <div id="document-custom-fields"></div>
+              <div class="form-actions">
+                <button type="submit" id="document-submit-button" class="primary">Guardar Documento</button>
+                <button type="button" id="document-cancel-edit" class="secondary" hidden>Cancelar edición</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="edit-document-heading">
+            <h2 id="edit-document-heading">Editar o eliminar el documento</h2>
+            <div>
+              <label for="edit-document">Selecciona un documento</label>
+              <select id="edit-document"></select>
+              <div class="error" id="error-edit-document" aria-live="polite"></div>
+            </div>
+            <div class="form-actions">
+              <button type="button" id="delete-document" class="danger">Eliminar el documento seleccionado</button>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-search" aria-labelledby="search-view-heading" hidden>
+          <h1 id="search-view-heading">Buscar Entidades</h1>
+
+          <section class="card" aria-labelledby="search-heading">
+            <h2 id="search-heading">Buscar una entidad</h2>
+            <input id="search-input" name="search-input" placeholder="Buscar por nombre, código, categoría..." aria-label="Buscar entidades" />
+          </section>
+
+          <section class="card" aria-labelledby="results-heading">
+            <h2 id="results-heading">Resultados</h2>
+            <div id="search-empty" class="empty" hidden>Sin coincidencias para tu búsqueda.</div>
+            <ul id="search-results-list" aria-live="polite"></ul>
+          </section>
+        </section>
+
+        <!-- ==================================================================
+             Control de Calidad
+             ================================================================== -->
+
+        <section id="view-quality-dashboard" class="view" aria-labelledby="quality-dashboard-heading" hidden>
+          <h1 id="quality-dashboard-heading">Dashboard de Calidad</h1>
+          <p class="muted">Indicadores agregados de inspecciones, no conformidades y acciones CAPA.</p>
+
+          <div class="field-row quality-role-row">
+            <div>
+              <label for="quality-role">Rol de uso</label>
+              <select id="quality-role">
+                <option value="jefe_calidad">Jefe de Calidad</option>
+                <option value="inspector">Inspector de Calidad</option>
+                <option value="gerente">Gerente de Operaciones</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="stat-grid">
+            <div class="stat-card">
+              <span class="stat-value" id="kpi-approval-rate">0%</span>
+              <span class="stat-label">Tasa de aprobación global</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="kpi-open-nc">0</span>
+              <span class="stat-label">No conformidades abiertas</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="kpi-overdue-capa">0</span>
+              <span class="stat-label">Acciones CAPA vencidas</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="kpi-capa-effectiveness">0%</span>
+              <span class="stat-label">Eficacia CAPA</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-value" id="kpi-pending-inspections">0</span>
+              <span class="stat-label">Inspecciones pendientes (draft)</span>
+            </div>
+          </div>
+
+          <section class="card" aria-labelledby="approval-stage-heading">
+            <h2 id="approval-stage-heading">Tasa de aprobación por etapa</h2>
+            <div id="quality-approval-by-stage" class="empty">Sin inspecciones completadas.</div>
+          </section>
+
+          <section class="card" aria-labelledby="nc-severity-heading">
+            <h2 id="nc-severity-heading">No conformidades abiertas por severidad</h2>
+            <div id="quality-nc-by-severity" class="empty">Sin no conformidades abiertas.</div>
+          </section>
+
+          <section class="card" aria-labelledby="pareto-product-heading">
+            <h2 id="pareto-product-heading">Pareto de no conformidades por producto</h2>
+            <div id="quality-pareto-product" class="empty">Sin no conformidades registradas.</div>
+          </section>
+
+          <section class="card" aria-labelledby="pareto-stage-heading">
+            <h2 id="pareto-stage-heading">Pareto de no conformidades por etapa</h2>
+            <div id="quality-pareto-stage" class="empty">Sin no conformidades registradas.</div>
+          </section>
+
+          <section class="card" id="quality-inspector-detail-card" aria-labelledby="inspector-detail-heading">
+            <h2 id="inspector-detail-heading">Detalle por inspector</h2>
+            <div id="quality-inspector-detail" class="empty">Disponible solo para el rol de Jefatura de Calidad.</div>
+          </section>
+        </section>
+
+        <section id="view-pending-lots" class="view" aria-labelledby="pending-lots-heading" hidden>
+          <h1 id="pending-lots-heading">Lotes pendientes</h1>
+          <p class="muted">Documentos origen que todavía no tienen una inspección completada.</p>
+
+          <section class="card" aria-labelledby="pending-lots-table-heading">
+            <h2 id="pending-lots-table-heading">Documentos origen</h2>
+            <table class="data-table">
+              <thead>
+                <tr><th>ID de lote</th><th>Origen</th><th>Producto</th><th>Fecha</th><th>Estado</th><th>Acción</th></tr>
+              </thead>
+              <tbody id="pending-lots-body"></tbody>
+            </table>
+            <div id="pending-lots-empty" class="empty" hidden>No hay lotes pendientes: todos los documentos origen tienen inspección completada.</div>
+          </section>
+        </section>
+
+        <section id="view-quality-plans" class="view" aria-labelledby="quality-plans-heading" hidden>
+          <h1 id="quality-plans-heading">Planes de inspección</h1>
+          <p class="muted">Define los criterios, tolerancias y criticidad que se aplicarán a cada producto y etapa.</p>
+
+          <section class="card" aria-labelledby="plan-form-heading">
+            <h2 id="plan-form-heading">Nuevo plan</h2>
+            <form id="plan-form">
+              <input type="hidden" id="plan-id" />
+              <div>
+                <label for="plan-name">Nombre del plan *</label>
+                <input id="plan-name" name="plan-name" />
+                <div class="error" id="error-plan-name" aria-live="polite"></div>
+              </div>
+              <div class="field-row">
+                <div>
+                  <label for="plan-product">Producto *</label>
+                  <select id="plan-product" name="plan-product"></select>
+                  <div class="error" id="error-plan-product" aria-live="polite"></div>
+                </div>
+                <div>
+                  <label for="plan-stage">Etapa *</label>
+                  <select id="plan-stage" name="plan-stage">
+                    <option value="incoming">Recepción (incoming)</option>
+                    <option value="in_process">En proceso (in_process)</option>
+                    <option value="final">Final (final)</option>
+                  </select>
+                  <div class="error" id="error-plan-stage" aria-live="polite"></div>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button type="submit" id="plan-submit" class="primary">Guardar plan</button>
+                <button type="button" id="plan-cancel" class="secondary" hidden>Cancelar edición</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="plans-list-heading">
+            <h2 id="plans-list-heading">Planes registrados</h2>
+            <div id="plans-list" class="empty">Aún no existen planes de inspección.</div>
+            <div class="error" id="plan-action-error" aria-live="polite"></div>
+          </section>
+
+          <section class="card" aria-labelledby="criteria-form-heading">
+            <h2 id="criteria-form-heading">Criterios del plan</h2>
+            <div>
+              <label for="criteria-plan">Plan *</label>
+              <select id="criteria-plan" name="criteria-plan"></select>
+              <div class="error" id="error-criteria-plan" aria-live="polite"></div>
+            </div>
+            <form id="criteria-form">
+              <input type="hidden" id="criteria-id" />
+              <div>
+                <label for="criteria-name">Nombre del criterio *</label>
+                <input id="criteria-name" name="criteria-name" />
+                <div class="error" id="error-criteria-name" aria-live="polite"></div>
+              </div>
+              <div class="field-row">
+                <div>
+                  <label for="criteria-expected">Valor esperado *</label>
+                  <input id="criteria-expected" name="criteria-expected" type="number" step="any" />
+                  <div class="error" id="error-criteria-expected" aria-live="polite"></div>
+                </div>
+                <div>
+                  <label for="criteria-tolerance">Tolerancia *</label>
+                  <input id="criteria-tolerance" name="criteria-tolerance" type="number" step="any" min="0" />
+                  <div class="error" id="error-criteria-tolerance" aria-live="polite"></div>
+                </div>
+              </div>
+              <div class="field-row">
+                <div>
+                  <label for="criteria-unit">Unidad *</label>
+                  <input id="criteria-unit" name="criteria-unit" />
+                  <div class="error" id="error-criteria-unit" aria-live="polite"></div>
+                </div>
+                <div>
+                  <label for="criteria-comparison">Tipo de comparación *</label>
+                  <select id="criteria-comparison" name="criteria-comparison">
+                    <option value="range">Rango (± tolerancia)</option>
+                    <option value="min">Mínimo</option>
+                    <option value="max">Máximo</option>
+                    <option value="boolean">Booleano (1/0)</option>
+                  </select>
+                  <div class="error" id="error-criteria-comparison" aria-live="polite"></div>
+                </div>
+              </div>
+              <div class="checkbox-row">
+                <input id="criteria-critical" name="criteria-critical" type="checkbox" />
+                <label for="criteria-critical">Criterio crítico (su falla reprueba la inspección)</label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" id="criteria-submit" class="primary">Guardar criterio</button>
+                <button type="button" id="criteria-cancel" class="secondary" hidden>Cancelar edición</button>
+              </div>
+            </form>
+            <div id="criteria-list" class="empty">Selecciona un plan para ver sus criterios.</div>
+            <div class="error" id="criteria-action-error" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <section id="view-inspections" class="view" aria-labelledby="inspections-heading" hidden>
+          <h1 id="inspections-heading">Ejecutar inspección</h1>
+          <p class="muted">El cumplimiento y el dictamen se calculan automáticamente a partir de las mediciones.</p>
+
+          <section class="card" aria-labelledby="inspection-form-heading">
+            <h2 id="inspection-form-heading">Formulario de inspección</h2>
+            <form id="inspection-form">
+              <input type="hidden" id="inspection-id" />
+              <div class="field-row">
+                <div>
+                  <label for="inspection-plan">Plan *</label>
+                  <select id="inspection-plan" name="inspection-plan"></select>
+                  <div class="error" id="error-inspection-plan" aria-live="polite"></div>
+                </div>
+                <div>
+                  <label for="inspection-inspector">Inspector *</label>
+                  <select id="inspection-inspector" name="inspection-inspector"></select>
+                  <div class="error" id="error-inspection-inspector" aria-live="polite"></div>
+                </div>
+              </div>
+              <div class="field-row">
+                <div>
+                  <label for="inspection-module">Módulo origen *</label>
+                  <select id="inspection-module" name="inspection-module">
+                    <option value="goods_receipt">Recepción de mercancía</option>
+                    <option value="production_order">Orden de producción</option>
+                    <option value="shipment">Despacho</option>
+                  </select>
+                  <div class="error" id="error-inspection-module" aria-live="polite"></div>
+                </div>
+                <div>
+                  <label for="inspection-reference">Documento origen *</label>
+                  <select id="inspection-reference" name="inspection-reference"></select>
+                  <div class="error" id="error-inspection-reference" aria-live="polite"></div>
+                </div>
+              </div>
+              <div>
+                <label for="inspection-date">Fecha de inspección *</label>
+                <input id="inspection-date" name="inspection-date" type="date" />
+                <div class="error" id="error-inspection-date" aria-live="polite"></div>
+              </div>
+
+              <div id="inspection-measurements"></div>
+              <div class="error" id="inspection-error" aria-live="polite"></div>
+              <div id="inspection-verdict" class="verdict" aria-live="polite" hidden></div>
+
+              <div class="form-actions">
+                <button type="button" id="inspection-save-draft" class="secondary">Guardar borrador</button>
+                <button type="button" id="inspection-complete" class="primary">Completar inspección</button>
+                <button type="button" id="inspection-reset" class="secondary">Limpiar formulario</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="drafts-heading">
+            <h2 id="drafts-heading">Inspecciones en borrador</h2>
+            <div id="inspection-drafts" class="empty">No hay inspecciones en borrador.</div>
+          </section>
+        </section>
+
+        <section id="view-non-conformance" class="view" aria-labelledby="nc-heading" hidden>
+          <h1 id="nc-heading">No conformidades y CAPA</h1>
+          <p class="muted">Revisa desviaciones condicionales, gestiona no conformidades y asigna acciones correctivas trazables.</p>
+
+          <section class="card" aria-labelledby="review-heading">
+            <h2 id="review-heading">Revisión de inspecciones condicionales</h2>
+            <table class="data-table">
+              <thead>
+                <tr><th>Inspección</th><th>Lote</th><th>Producto</th><th>Fecha</th><th>Dictamen</th></tr>
+              </thead>
+              <tbody id="review-body"></tbody>
+            </table>
+            <div id="review-empty" class="empty" hidden>No hay inspecciones condicionales pendientes de revisión.</div>
+
+            <h3>Cambiar dictamen</h3>
+            <form id="override-form">
+              <div class="field-row">
+                <div>
+                  <label for="override-inspection">Inspección *</label>
+                  <select id="override-inspection" name="override-inspection"></select>
+                </div>
+                <div>
+                  <label for="override-result">Nuevo dictamen *</label>
+                  <select id="override-result" name="override-result">
+                    <option value="passed">Aprobado (passed)</option>
+                    <option value="conditional">Condicional (conditional)</option>
+                    <option value="failed">Reprobado (failed)</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label for="override-user">Usuario que autoriza *</label>
+                <input id="override-user" name="override-user" />
+              </div>
+              <div>
+                <label for="override-justification">Justificación *</label>
+                <textarea id="override-justification" name="override-justification" rows="2"></textarea>
+              </div>
+              <div class="error" id="override-error" aria-live="polite"></div>
+              <div class="form-actions">
+                <button type="submit" class="primary">Registrar cambio de dictamen</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="nc-list-heading">
+            <h2 id="nc-list-heading">No conformidades</h2>
+            <div id="nc-list" class="empty">No hay no conformidades registradas.</div>
+            <form id="nc-form">
+              <input type="hidden" id="nc-id" />
+              <div>
+                <label for="nc-description">Descripción *</label>
+                <textarea id="nc-description" name="nc-description" rows="2"></textarea>
+                <div class="error" id="error-nc-description" aria-live="polite"></div>
+              </div>
+              <div class="field-row">
+                <div>
+                  <label for="nc-defect">Tipo de defecto *</label>
+                  <select id="nc-defect" name="nc-defect">
+                    <option value="dimensional">Dimensional</option>
+                    <option value="functional">Funcional</option>
+                    <option value="packaging">Empaque</option>
+                    <option value="other">Otro</option>
+                  </select>
+                  <div class="error" id="error-nc-defect" aria-live="polite"></div>
+                </div>
+                <div>
+                  <label for="nc-severity">Severidad *</label>
+                  <select id="nc-severity" name="nc-severity">
+                    <option value="minor">Menor</option>
+                    <option value="major">Mayor</option>
+                    <option value="critical">Crítica</option>
+                  </select>
+                  <div class="error" id="error-nc-severity" aria-live="polite"></div>
+                </div>
+              </div>
+              <div>
+                <label for="nc-status">Estado *</label>
+                <select id="nc-status" name="nc-status">
+                  <option value="open">Abierta</option>
+                  <option value="under_review">En revisión</option>
+                  <option value="closed">Cerrada</option>
+                </select>
+                <div class="error" id="error-nc-status" aria-live="polite"></div>
+              </div>
+              <div class="error" id="nc-error" aria-live="polite"></div>
+              <div class="form-actions">
+                <button type="submit" class="primary">Guardar no conformidad</button>
+                <button type="button" id="nc-cancel" class="secondary" hidden>Cancelar edición</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="capa-heading">
+            <h2 id="capa-heading">Acciones CAPA</h2>
+            <div id="capa-list" class="empty">No hay acciones CAPA registradas.</div>
+            <form id="capa-form">
+              <input type="hidden" id="capa-id" />
+              <div>
+                <label for="capa-nc">No conformidad *</label>
+                <select id="capa-nc" name="capa-nc"></select>
+                <div class="error" id="error-capa-nc" aria-live="polite"></div>
+              </div>
+              <div class="field-row">
+                <div>
+                  <label for="capa-responsible">Responsable *</label>
+                  <select id="capa-responsible" name="capa-responsible"></select>
+                  <div class="error" id="error-capa-responsible" aria-live="polite"></div>
+                </div>
+                <div>
+                  <label for="capa-type">Tipo de acción *</label>
+                  <select id="capa-type" name="capa-type">
+                    <option value="resampling">Remuestreo</option>
+                    <option value="rework">Reproceso</option>
+                    <option value="other">Otra</option>
+                  </select>
+                  <div class="error" id="error-capa-type" aria-live="polite"></div>
+                </div>
+              </div>
+              <div>
+                <label for="capa-description">Descripción de la acción *</label>
+                <input id="capa-description" name="capa-description" />
+                <div class="error" id="error-capa-description" aria-live="polite"></div>
+              </div>
+              <div>
+                <label for="capa-root">Causa raíz *</label>
+                <textarea id="capa-root" name="capa-root" rows="2"></textarea>
+                <div class="error" id="error-capa-root" aria-live="polite"></div>
+              </div>
+              <div class="field-row">
+                <div>
+                  <label for="capa-due">Fecha límite *</label>
+                  <input id="capa-due" name="capa-due" type="date" />
+                  <div class="error" id="error-capa-due" aria-live="polite"></div>
+                </div>
+                <div>
+                  <label for="capa-status">Estado *</label>
+                  <select id="capa-status" name="capa-status">
+                    <option value="pending">Pendiente</option>
+                    <option value="in_progress">En progreso</option>
+                    <option value="completed">Completada</option>
+                  </select>
+                  <div class="error" id="error-capa-status" aria-live="polite"></div>
+                </div>
+              </div>
+              <div class="error" id="capa-error" aria-live="polite"></div>
+              <div class="form-actions">
+                <button type="submit" class="primary">Guardar acción CAPA</button>
+                <button type="button" id="capa-cancel" class="secondary" hidden>Cancelar edición</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="card" aria-labelledby="quarantine-heading">
+            <h2 id="quarantine-heading">Lotes en cuarentena</h2>
+            <table class="data-table">
+              <thead>
+                <tr><th>ID de lote</th><th>Producto</th><th>Severidad</th><th>Tipo de defecto</th><th>Estado</th><th>CAPA</th></tr>
+              </thead>
+              <tbody id="quarantine-body"></tbody>
+            </table>
+            <div id="quarantine-empty" class="empty" hidden>No hay lotes en cuarentena.</div>
+          </section>
+        </section>
+
+        <section id="view-quality-history" class="view" aria-labelledby="history-heading" hidden>
+          <h1 id="history-heading">Historial de inspecciones</h1>
+          <p class="muted">Consulta la trazabilidad desde la inspección hasta la no conformidad y sus acciones CAPA.</p>
+
+          <section class="card" aria-labelledby="history-filters-heading">
+            <h2 id="history-filters-heading">Filtros</h2>
+            <div class="field-row">
+              <div>
+                <label for="history-module">Módulo origen</label>
+                <select id="history-module" name="history-module">
+                  <option value="">Todos</option>
+                  <option value="goods_receipt">Recepción de mercancía</option>
+                  <option value="production_order">Orden de producción</option>
+                  <option value="shipment">Despacho</option>
+                </select>
+              </div>
+              <div>
+                <label for="history-lot">Lote (documento origen)</label>
+                <select id="history-lot" name="history-lot">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div>
+                <label for="history-from">Desde</label>
+                <input id="history-from" name="history-from" type="date" />
+              </div>
+              <div>
+                <label for="history-to">Hasta</label>
+                <input id="history-to" name="history-to" type="date" />
+              </div>
+            </div>
+            <div class="error" id="history-error" aria-live="polite"></div>
+            <div class="form-actions">
+              <button type="button" id="history-apply" class="primary">Aplicar filtros</button>
+              <button type="button" id="history-clear" class="secondary">Limpiar filtros</button>
+            </div>
+          </section>
+
+          <section class="card" aria-labelledby="history-table-heading">
+            <h2 id="history-table-heading">Inspecciones</h2>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th><th>Lote</th><th>Producto</th><th>Plan</th><th>Inspector</th>
+                  <th>Estado</th><th>Dictamen</th><th>No conformidad</th><th>CAPA</th>
+                </tr>
+              </thead>
+              <tbody id="history-body"></tbody>
+            </table>
+            <div id="history-empty" class="empty" hidden>No hay inspecciones para los filtros aplicados.</div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
