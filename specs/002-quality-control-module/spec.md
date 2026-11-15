@@ -20,6 +20,14 @@
 - Q: ¿Qué datos debe contener el borrador de no conformidad generado automáticamente? → A: Descripción autogenerada a partir de los criterios incumplidos (editable y obligatoria), producto tomado del plan, tipo de defecto inicial `other`, severidad inicial `major` y estado `open`.
 - Q: ¿Qué datos exige una acción CAPA? → A: Responsable, descripción de la acción, causa raíz, tipo de acción (`resampling`, `rework` u `other`) y fecha límite.
 
+### Session 2026-11-14
+
+- Q: ¿Qué plan de inspección debe poder seleccionarse y validarse para un documento origen dado? → A: Debe coincidir con el producto y la etapa del origen; la etapa se deriva del módulo de origen (`goods_receipt` → `incoming`, `production_order` → `in_process`, `shipment` → `final`) y el producto se toma del documento origen.
+- Q: Sin autenticación multiusuario en el MVP, ¿cómo se determina el usuario y el rol activo para aplicar las restricciones de jefatura? → A: Mediante un selector de rol/empleado activo en la interfaz (Inspector, Jefe de Calidad, Gerente/Auditor), persistido localmente; las acciones sensibles registran ese usuario y rol.
+- Q: ¿Qué efecto debe tener el rechazo manual de una inspección por parte del Jefe de Calidad? → A: Fija el dictamen en `failed`, registra motivo, usuario y fecha, y asegura una no conformidad `open` asociada; la inspección permanece `completed`.
+- Q: ¿Qué condición debe cumplirse para cerrar una no conformidad y retirar el lote de cuarentena? → A: Solo cuando todas sus acciones CAPA estén `completed`; el Jefe de Calidad cierra con fecha y comentario, y el lote sale de cuarentena al cerrarse.
+- Q: Si un lote ya tiene una inspección en estado `draft`, ¿qué debe ocurrir cuando el Inspector inicia una inspección para ese mismo lote? → A: Se reanuda el borrador existente del mismo origen y plan, conservando las mediciones ya ingresadas y sin crear un duplicado.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Configurar planes y criterios de inspección (Priority: P1)
@@ -52,8 +60,8 @@ Como Inspector de Calidad, quiero ver los lotes pendientes de revisión y regist
 **Acceptance Scenarios**:
 
 1. **Given** documentos origen cargados, **When** el Inspector abre la vista de lotes pendientes, **Then** la tabla muestra ID de lote, producto, fecha y estado, incluyendo solo los lotes sin inspección completada.
-2. **Given** la tabla de lotes pendientes, **When** el Inspector usa la acción "Inspeccionar", **Then** se abre el formulario de inspección con el lote preseleccionado.
-3. **Given** un plan con criterios y un documento origen existente, **When** el Inspector registra la inspección con fecha e inspector, **Then** la inspección se guarda en estado `draft` asociada a un plan y a un origen válido.
+2. **Given** la tabla de lotes pendientes, **When** el Inspector usa la acción "Inspeccionar", **Then** se abre el formulario de inspección con el lote preseleccionado; si ya existe un borrador para ese origen y plan, se reanuda con las mediciones conservadas en lugar de crear uno nuevo.
+3. **Given** un plan habilitado y un documento origen existente cuyo producto y etapa coinciden con el plan, **When** el Inspector registra la inspección con fecha e inspector, **Then** la inspección se guarda en estado `draft` asociada a un plan y a un origen válido.
 4. **Given** una inspección en curso, **When** el Inspector ingresa un valor medido numérico por criterio, **Then** el sistema calcula el cumplimiento comparando el valor con el valor esperado, la tolerancia y el tipo de comparación.
 5. **Given** todos los criterios evaluados, **When** el sistema completa la inspección, **Then** el dictamen es `failed` si falla al menos un criterio crítico, `conditional` si solo hay desviaciones no críticas y `passed` si todos cumplen.
 6. **Given** una medición exactamente en el límite de la tolerancia, **When** se evalúa, **Then** el criterio se considera cumplido.
@@ -96,10 +104,12 @@ Como Jefe de Calidad, quiero revisar las inspecciones condicionales y los lotes 
 
 1. **Given** una inspección con criterios críticos fallidos o sin medición, **When** el Jefe de Calidad intenta aprobarla, **Then** el sistema lo bloquea y explica el motivo.
 2. **Given** una inspección reprobada o condicional, **When** el Jefe de Calidad cambia el dictamen, **Then** el sistema exige una justificación, registra usuario y fecha del cambio, y no permite `passed` si hay criterios críticos fallidos o sin medición.
-3. **Given** una inspección que se rechaza manualmente, **When** el Jefe de Calidad confirma la acción, **Then** el sistema muestra una confirmación y exige el motivo de rechazo antes de guardar.
+3. **Given** una inspección que se rechaza manualmente, **When** el Jefe de Calidad confirma la acción con el motivo de rechazo, **Then** el sistema fija el dictamen en `failed`, registra motivo, usuario y fecha, y asegura una no conformidad `open` asociada sin cambiar el estado `completed` de la inspección.
 4. **Given** una inspección `conditional`, **When** se abre la bandeja de revisión, **Then** aparece marcada como pendiente de revisión del Jefe de Calidad.
 5. **Given** un lote con no conformidad `open` o `under_review`, **When** se abre la pestaña de cuarentena, **Then** la tabla muestra ID de lote, producto, severidad y tipo de defecto, y permite abrir la acción CAPA correspondiente.
 6. **Given** un lote en cuarentena sin CAPA, **When** el Jefe de Calidad asigna una acción, **Then** el lote se muestra como "Cuarentena - En tratamiento".
+7. **Given** una no conformidad con todas sus acciones CAPA `completed`, **When** el Jefe de Calidad la cierra con fecha y comentario, **Then** la no conformidad queda `closed` y el lote deja de aparecer en cuarentena.
+8. **Given** una no conformidad con al menos una acción CAPA no `completed` o sin CAPA, **When** el Jefe de Calidad intenta cerrarla, **Then** el sistema lo bloquea y explica el motivo.
 
 ---
 
@@ -151,12 +161,14 @@ Como Auditor o Gerente de Operaciones, quiero filtrar el historial de inspeccion
 - Intento de aprobar una inspección con criterios críticos fallidos o sin medición: se bloquea y se informa el motivo.
 - Acción CAPA sin responsable, descripción, causa raíz, tipo de acción o fecha límite: se rechaza.
 - Acción CAPA cuya fecha límite ya pasó: se marca como vencida, sin cambiar automáticamente su estado.
+- No conformidad sin CAPA o con alguna CAPA no `completed`: no puede cerrarse y el lote permanece en cuarentena.
 - Rango de fechas inválido en el historial (desde posterior a hasta): se informa y no se aplica el filtro.
 - Eliminación de una inspección con no conformidad asociada: se bloquea para preservar la trazabilidad.
 - Eliminación de una no conformidad con acciones CAPA: se eliminan sus acciones CAPA en cascada.
 - Eliminación de una inspección sin no conformidades: se eliminan sus resultados en cascada.
 - Consulta de métricas individuales por inspector sin rol de jefatura: se limita al nivel agregado.
-- Lote sin inspección completada: se muestra como pendiente, aunque exista una inspección en estado `draft`.
+- Lote sin inspección completada: se muestra como pendiente, aunque exista una inspección en estado `draft`; al inspeccionarlo se reanuda el borrador del mismo origen y plan.
+- Origen y plan con más de una inspección `draft` por datos previos: se reanuda la más reciente y se advierte la inconsistencia sin crear otra.
 
 ## Requirements *(mandatory)*
 
@@ -194,6 +206,11 @@ Como Auditor o Gerente de Operaciones, quiero filtrar el historial de inspeccion
 - **FR-030**: El sistema MUST mostrar una vista de lotes pendientes con ID de lote, producto, fecha, estado y una acción para iniciar la inspección.
 - **FR-031**: El sistema MUST mostrar en una vista o pestaña de cuarentena los lotes con no conformidades en estado `open` o `under_review`, incluyendo ID de lote, producto, severidad, tipo de defecto y acceso a la acción CAPA.
 - **FR-032**: El sistema MUST registrar usuario y fecha cuando el Jefe de Calidad cambia un dictamen, y MUST conservar ese registro en el historial.
+- **FR-033**: El sistema MUST permitir seleccionar solo planes cuyo producto y etapa coincidan con el documento origen, derivando la etapa del módulo de origen (`goods_receipt` → `incoming`, `production_order` → `in_process`, `shipment` → `final`) y tomando el producto del documento origen.
+- **FR-034**: El sistema MUST ofrecer un selector de usuario/rol activo (`Inspector`, `Jefe de Calidad`, `Gerente/Auditor`) persistido localmente, MUST usar ese rol para habilitar las acciones de jefatura y MUST registrar el usuario y rol activos en las acciones sensibles.
+- **FR-035**: El sistema MUST permitir al Jefe de Calidad rechazar manualmente una inspección `completed`: MUST exigir el motivo de rechazo, fijar el dictamen en `failed`, registrar motivo, usuario y fecha, garantizar una no conformidad `open` asociada y conservar la inspección en estado `completed`.
+- **FR-036**: El sistema MUST permitir cerrar una no conformidad solo cuando todas sus acciones CAPA estén `completed`, exigiendo fecha y comentario de cierre; al cerrarse, el lote MUST dejar de mostrarse en cuarentena.
+- **FR-037**: El sistema MUST reanudar el borrador existente cuando se inicie una inspección para un origen y plan que ya tienen una inspección `draft`, conservando sus mediciones y sin crear un duplicado.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -233,7 +250,7 @@ Como Auditor o Gerente de Operaciones, quiero filtrar el historial de inspeccion
 
 ## Assumptions
 
-- El módulo se usa en una sola organización y no requiere autenticación multiusuario en el MVP; los roles se representan como perfiles de uso.
+- El módulo se usa en una sola organización y no requiere autenticación multiusuario en el MVP; el usuario y rol activos se seleccionan en la interfaz y se persisten localmente, y las acciones sensibles registran esa identidad.
 - Los productos, empleados, recepciones, órdenes de producción y despachos son dependencias externas provistas como datos semilla para pruebas y demo.
 - Las tolerancias se interpretan como límites inclusivos y los valores medidos son numéricos.
 - El volumen esperado es de hasta 500 inspecciones almacenadas; volúmenes mayores quedan fuera del MVP.
