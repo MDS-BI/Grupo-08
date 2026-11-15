@@ -1,7 +1,7 @@
 # Plan de Desarrollo: Módulo de Control de Calidad
 
 **Módulo**: `002-quality-control-module`  
-**Estado**: Borrador  
+**Estado**: Vigente  
 **Metodología**: Spec-Driven Development (Speckit)  
 **Modelo de datos**: [data-model.md](data-model.md)  
 **Módulo base relacionado**: [001-erp-base-module](../001-erp-base-module/)  
@@ -116,7 +116,7 @@ Este es el riesgo principal señalado en el feedback y debe resolverse antes de 
 - Los lotes pendientes se derivan comparando los documentos origen externos con las inspecciones completadas.
 - La integración se considerará lograda cuando una inspección pueda vincularse a un origen válido, consultar producto e inspector, registrar resultados y no conformidades, y mantener el seguimiento CAPA sin referencias huérfanas.
 
-**Bloqueo técnico actual.** El código del módulo base (`index.html` y `src/`) no está en el repositorio: fue eliminado en el commit `a0062c0`. Antes de ejecutar una versión integrada hay que restaurarlo (`git restore --source=a0062c0^ -- index.html src`) o implementarlo desde las especificaciones y pruebas existentes. Sin este paso no es posible cumplir el hito de "versión integrada de prueba".
+**Estado de la integración.** El código del módulo base y del módulo de calidad ya está en el repositorio y es ejecutable. La aplicación Vite arranca desde `index.html` y `src/main.js`, que invoca `boot()` en `src/app.js`. La capa de datos está en `src/storage.js` (colecciones en `localStorage` con identificadores `string`, validación de referencias polimórficas, generación automática de no conformidades y derivación de lotes pendientes y cuarentena); el motor de tolerancias en `src/inspection-engine.js`; la configuración del módulo en `src/module-config.js`; y los datos semilla de las dependencias externas en `src/seed-data.js`. Las vistas del módulo de calidad están en `src/components/`: `dashboard.js` (KPIs y Pareto), `pending-lots.js`, `quality-plan-config.js`, `inspection-engine.js` (formulario y evaluación), `non-conformance-capa.js` (no conformidades, CAPA y cuarentena) e `inspection-history.js`, apoyadas por `shell.js` y `quality-utils.js`; los componentes del módulo base (`entity-form.js`, `entity-list.js`, `document-form.js`, `document-list.js`, `custom-fields.js`, `search-bar.js`) se reutilizan para la navegación y la administración del ERP. La suite de `tests/` (`unit/`, `integration/` y `support/`) cubre el motor de tolerancias, las derivaciones, el flujo de inspección y las vistas de calidad. La integración ya vincula inspecciones a orígenes válidos sin referencias huérfanas; resta validar de extremo a extremo la versión integrada con los datos semilla.
 
 ## 8. Estructura del proyecto
 
@@ -136,28 +136,36 @@ specs/002-quality-control-module/
 
 ```text
 src/
-├── main.js
+├── main.js                      (punto de entrada Vite: importa estilos y arranca `boot()`)
 ├── styles.css
-├── storage.js
-├── app.js
-├── module-config.js
-├── seed-data.js                (datos semilla de productos, empleados, recepciones, órdenes y despachos)
+├── storage.js                   (capa de datos en `localStorage`: validaciones, derivación de lotes pendientes y cuarentena)
+├── app.js                       (arranque, navegación y conmutación entre el módulo base y las vistas de calidad)
+├── module-config.js             (configuración del módulo)
+├── inspection-engine.js         (motor puro de evaluación de tolerancias, sin DOM ni almacenamiento)
+├── seed-data.js                 (datos semilla de productos, empleados, recepciones, órdenes y despachos)
 └── components/
     ├── shell.js                  (marco del espacio de trabajo: barra superior, logotipo SVG, barra lateral, estado de módulo activo)
     ├── dashboard.js              (dashboard de calidad: KPIs, Pareto de defectos e inspecciones pendientes)
     ├── pending-lots.js           (tabla de lotes pendientes y acción para iniciar inspección)
     ├── quality-plan-config.js    (configurador maestro-detalle de planes y criterios por producto y etapa)
-    ├── inspection-engine.js      (selector del origen, formulario de mediciones y evaluación automática de tolerancias)
+    ├── inspection-engine.js      (vista de inspección: selector del origen, formulario de mediciones y evaluación)
     ├── non-conformance-capa.js   (registro de no conformidades, panel de acciones CAPA y pestaña de cuarentena)
-    └── inspection-history.js     (historial filtrable por lote, fechas y limpieza de filtros)
+    ├── inspection-history.js     (historial filtrable por lote, fechas y limpieza de filtros)
+    ├── quality-utils.js          (ayudantes compartidos: escape de HTML, etiquetas y consultas DOM)
+    ├── search-bar.js             (barra de búsqueda y resultados del módulo base)
+    ├── entity-form.js            (formulario de entidades del módulo base)
+    ├── entity-list.js            (listado de entidades del módulo base)
+    ├── document-form.js          (formulario de documentos del módulo base)
+    ├── document-list.js          (listado de documentos del módulo base)
+    └── custom-fields.js          (campos personalizados configurables del módulo base)
 
 tests/
-├── unit/
-├── integration/
-└── setup/
+├── unit/                        (motor de tolerancias, derivaciones, configuración de módulo, planes y almacenamiento)
+├── integration/                 (flujos de inspección, no conformidad/CAPA, cuarentena, dashboard, historial y módulo base)
+└── support/                     (utilidades de prueba compartidas, p. ej. `quality-dom.js`)
 ```
 
-**Decisión de Estructura**: Se reutiliza la estructura del módulo base (`specs/001-erp-base-module`): una aplicación Vite simple con un único punto de entrada HTML, módulos JavaScript pequeños y un CSS separado, con persistencia en `localStorage`. Los componentes se dividen por vista del módulo — dashboard, lotes pendientes, planes y criterios, motor de inspección, no conformidades/CAPA/cuarentena e historial — para mantener cada flujo aislado y testeable. `shell.js`, `dashboard.js` y `module-config.js` conservan el mismo rol que en el módulo base, de modo que la marca y la navegación permanezcan consistentes entre ambos módulos. El motor de tolerancias vive en `inspection-engine.js` y no en el componente de vista, para poder cubrirlo con pruebas unitarias de `tests/unit/`.
+**Decisión de Estructura**: Se reutiliza la estructura del módulo base (`specs/001-erp-base-module`): una aplicación Vite simple con un único punto de entrada HTML, módulos JavaScript pequeños y un CSS separado, con persistencia en `localStorage`. Los componentes se dividen por vista del módulo — dashboard, lotes pendientes, planes y criterios, motor de inspección, no conformidades/CAPA/cuarentena e historial — para mantener cada flujo aislado y testeable. `shell.js`, `dashboard.js` y `module-config.js` conservan el mismo rol que en el módulo base, de modo que la marca y la navegación permanezcan consistentes entre ambos módulos. El motor de tolerancias vive en `src/inspection-engine.js` y no en la vista `src/components/inspection-engine.js`, para poder cubrirlo con pruebas unitarias de `tests/unit/`.
 
 ## 9. KPIs y análisis
 
@@ -212,15 +220,15 @@ El módulo se considerará terminado cuando:
 | Observación del feedback | Acción en este plan |
 | :--- | :--- |
 | `plan` y `data-model` deben estar dentro de `specs` | Este plan vive en `specs/002-quality-control-module/` y se restauró `data-model.md` en la misma carpeta. Los documentos de la raíz quedan marcados como históricos. |
-| "Ojo con la integración" | Sección 7: contrato, identificadores `string`, validación polimórfica y bloqueo del código base. |
+| "Ojo con la integración" | Sección 7: contrato, identificadores `string` y validación polimórfica de referencias. |
 | Trabajar en los specs e historias de usuario | `Historias-Usuarios.md` se refleja en `spec.md` con prioridades y criterios Dado/Cuando/Entonces, incluyendo lotes pendientes y cuarentena. |
 | Dividirse las historias y tareas | `tasks.md` incluye responsables por fase, fechas y tareas paralelizables. |
-| Ejecutar una versión integrada de prueba | Fase 4 y sección 12; requiere restaurar el módulo base (sección 7). |
+| Ejecutar una versión integrada de prueba | Fase 4 y sección 12; la versión integrada se valida con el módulo base y los datos semilla (sección 7). |
 
 ## 14. Pendientes antes de implementar
 
-- Restaurar o implementar el código del módulo base (`index.html` y `src/`).
-- Crear `src/seed-data.js` con los datos semilla acordados.
+**Estado actual.** El código base y del módulo de calidad ya está en el repositorio y es ejecutable con `npm run dev`, con la suite en `npm test`. Existen `index.html`, `src/main.js`, `src/app.js`, `src/storage.js`, `src/inspection-engine.js`, `src/module-config.js` y `src/seed-data.js`; las vistas de calidad en `src/components/` (`dashboard.js`, `pending-lots.js`, `quality-plan-config.js`, `inspection-engine.js`, `non-conformance-capa.js`, `inspection-history.js`, `shell.js`, `quality-utils.js`); y las pruebas en `tests/unit/`, `tests/integration/` y `tests/support/`.
+
+**Pendientes:**
 - Definir y configurar los comandos de lint, formato y análisis estático.
-- Implementar las tareas de pruebas por flujo antes de cerrar cada vista.
-- Validar la versión integrada con el módulo base y los datos semilla.
+- Validar de extremo a extremo la versión integrada con el módulo base y los datos semilla.
