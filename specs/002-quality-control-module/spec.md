@@ -39,6 +39,12 @@
 - Q: ¿Cómo se selecciona o cambia el rol de usuario activo (selector del dashboard)? → A: Con el selector "Rol de uso" (`jefe_calidad`, `inspector`, `gerente`), cuyo valor se persiste en `localStorage` (`erp_quality:viewer_role`) y vuelve a renderizar el dashboard al cambiar; el rol solo restringe el detalle individual por inspector, exclusivo de `jefe_calidad`.
 - Q: ¿Cómo funciona la navegación hacia Control de Calidad desde el módulo base del ERP (001)? → A: Mediante el grupo "Control de Calidad" de la barra lateral, que alterna la vista de calidad seleccionada y oculta las vistas del módulo base; la acción "Inspeccionar" de lotes pendientes abre la vista de inspecciones con el documento origen preseleccionado.
 
+## Problema y Solución
+
+**Problema.** En muchas empresas los controles de calidad se registran en planillas aisladas del flujo operativo. Esto permite que materias primas defectuosas entren a producción, que lotes con fallas sigan procesándose o que productos defectuosos lleguen al cliente, generando devoluciones, mermas y pérdida de trazabilidad ante auditorías (por ejemplo, ISO 9001).
+
+**Solución.** Un módulo transversal de Control de Calidad que cubre las etapas `incoming`, `in_process` y `final`, con planes y criterios configurables, identificación de lotes pendientes, evaluación automática de tolerancias, registro de no conformidades, cuarentena y seguimiento CAPA. El MVP será una aplicación frontend con persistencia local, coherente con el módulo base ERP.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Configurar planes y criterios de inspección (Priority: P1)
