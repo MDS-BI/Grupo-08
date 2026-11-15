@@ -232,3 +232,35 @@ El módulo se considerará terminado cuando:
 **Pendientes:**
 - Definir y configurar los comandos de lint, formato y análisis estático.
 - Validar de extremo a extremo la versión integrada con el módulo base y los datos semilla.
+
+## 15. Escalabilidad y desarrollo futuro
+
+Las siguientes mejoras quedan fuera del alcance del MVP (ver §4 y `spec.md` › "Fuera de Alcance") y se apoyan en el patrón polimórfico (`reference_module` + `reference_id`) y en las referencias a las tablas maestras descritas en §7. Provienen del plan histórico de la raíz (`./plan.md`, §4.2 "Escalabilidad y Desarrollo Futuro").
+
+### 15.1 Inventario
+
+Bloqueo automático del stock afectado: conectar las inspecciones reprobadas para retener automáticamente el lote y moverlo a cuarentena, de modo que un origen con `overall_result = 'failed'` no siga procesándose.
+
+- **Rol que la aprovecha**: **Jefe de Calidad** (historias 3 y 4: clasifica las no conformidades y gestiona la cuarentena hasta liberar o rechazar el lote).
+- **Tabla/campo que la habilita**: `non_conformances.status` (`open`/`under_review` mantiene el lote retenido y `closed` lo libera) y `non_conformances.product_id`, sobre el lote polimórfico `quality_inspections.reference_module` + `reference_id` (data-model.md §3.3, §3.5).
+
+### 15.2 Proveedores
+
+Evaluación de proveedores: cruzar las fallas detectadas en las recepciones para calificar automáticamente a los proveedores.
+
+- **Rol que la aprovecha**: **Gerente de Operaciones / Auditor** (historias 5 y 6: evalúa el desempeño y audita el cumplimiento).
+- **Tabla/campo que la habilita**: `quality_inspections.reference_module` con valor `goods_receipt` y `quality_inspections.overall_result`, más `non_conformances.product_id`, que enlazan cada recepción inspeccionada con el producto afectado (data-model.md §3.3, §3.5).
+
+### 15.3 Devoluciones
+
+Inspección de devoluciones de clientes: incorporar `returns_rma` como nuevo valor del catálogo polimórfico para reutilizar los mismos planes y criterios.
+
+- **Rol que la aprovecha**: **Inspector de Calidad** (historia 2: registra la inspección y las mediciones), con seguimiento del **Jefe de Calidad**.
+- **Tabla/campo que la habilita**: `quality_inspections.reference_module` (ampliar su catálogo canónico con `returns_rma`) junto con `reference_id` (data-model.md §3.3).
+
+### 15.4 IoT
+
+Captura automática de mediciones: poblar el valor medido desde instrumentos digitales (balanzas, sensores de temperatura, calibres) en lugar del ingreso manual.
+
+- **Rol que la aprovecha**: **Inspector de Calidad** (historia 2: ingresa las mediciones por criterio).
+- **Tabla/campo que la habilita**: `quality_inspection_results.measured_value` (se poblaría de forma automática; `pass_fail` se seguiría calculando) (data-model.md §3.4).
