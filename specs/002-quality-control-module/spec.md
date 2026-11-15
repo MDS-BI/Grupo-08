@@ -55,6 +55,8 @@ Como Jefe de Calidad, quiero crear y mantener planes de inspección asociados a 
 
 **Independent Test**: Crear un plan para un producto y etapa, agregar criterios con valor esperado y tolerancia, y verificar que el plan queda disponible para ejecutar inspecciones.
 
+Datos: `quality_inspection_plans`, `quality_inspection_criteria`, `products`
+
 **Acceptance Scenarios**:
 
 1. **Given** un producto existente y una etapa válida, **When** el Jefe de Calidad crea un plan con nombre, **Then** el plan se guarda y queda disponible para inspecciones.
@@ -73,6 +75,8 @@ Como Inspector de Calidad, quiero ver los lotes pendientes de revisión y regist
 **Why this priority**: Es el núcleo operativo del módulo; sin identificación de lotes ni inspecciones no se detectan desviaciones ni se generan no conformidades.
 
 **Independent Test**: Abrir la lista de lotes pendientes, iniciar una inspección sobre un origen válido, ingresar mediciones y comprobar que el dictamen se calcula sin intervención manual.
+
+Datos: `quality_inspections`, `quality_inspection_results`, `quality_inspection_plans`, `quality_inspection_criteria`, `products`, `employees`, `goods_receipts`, `production_orders`, `shipments`
 
 **Acceptance Scenarios**:
 
@@ -97,6 +101,8 @@ Como Jefe de Calidad, quiero que una inspección reprobada origine una no confor
 
 **Independent Test**: Reproducir una inspección reprobada y verificar que se crea una no conformidad con descripción y que se puede asignar una acción CAPA con responsable, causa raíz, tipo de acción y vencimiento.
 
+Datos: `quality_inspections`, `non_conformances`, `corrective_actions`, `employees`
+
 **Acceptance Scenarios**:
 
 1. **Given** una inspección con dictamen `failed`, **When** se completa, **Then** el sistema genera un borrador de no conformidad con descripción autogenerada de los criterios incumplidos, producto del plan, tipo de defecto `other`, severidad `major` y estado `open`.
@@ -116,6 +122,8 @@ Como Jefe de Calidad, quiero revisar las inspecciones condicionales y los lotes 
 **Why this priority**: Aporta control y evidencia ante auditorías, pero depende de que ya existan inspecciones reprobadas o condicionales.
 
 **Independent Test**: Abrir una inspección reprobada, intentar aprobarla con criterios críticos fallidos y verificar el bloqueo; luego cambiar el dictamen con justificación y comprobar el registro de usuario y fecha; finalmente revisar un lote en cuarentena.
+
+Datos: `quality_inspections`, `non_conformances`, `corrective_actions`
 
 **Acceptance Scenarios**:
 
@@ -137,6 +145,8 @@ Como Gerente de Operaciones, quiero ver indicadores agregados de aprobación, no
 
 **Independent Test**: Con datos de inspecciones y no conformidades cargados, abrir el dashboard y verificar que los indicadores coinciden con los registros.
 
+Datos: `quality_inspections`, `non_conformances`, `corrective_actions`
+
 **Acceptance Scenarios**:
 
 1. **Given** inspecciones completadas, **When** se abre el dashboard, **Then** se muestra la tasa de aprobación por etapa.
@@ -155,6 +165,8 @@ Como Auditor o Gerente de Operaciones, quiero filtrar el historial de inspeccion
 **Why this priority**: Facilita auditoría y consulta, pero no bloquea el flujo operativo del MVP.
 
 **Independent Test**: Aplicar filtros de lote y fechas sobre un historial con datos y verificar que la tabla muestra solo los registros coincidentes.
+
+Datos: `quality_inspections`, `quality_inspection_results`
 
 **Acceptance Scenarios**:
 
