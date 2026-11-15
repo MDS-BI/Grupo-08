@@ -23,10 +23,21 @@
 ### Session 2026-11-14
 
 - Q: ¿Qué plan de inspección debe poder seleccionarse y validarse para un documento origen dado? → A: Debe coincidir con el producto y la etapa del origen; la etapa se deriva del módulo de origen (`goods_receipt` → `incoming`, `production_order` → `in_process`, `shipment` → `final`) y el producto se toma del documento origen.
-- Q: Sin autenticación multiusuario en el MVP, ¿cómo se determina el usuario y el rol activo para aplicar las restricciones de jefatura? → A: Mediante un selector de rol/empleado activo en la interfaz (Inspector, Jefe de Calidad, Gerente/Auditor), persistido localmente; las acciones sensibles registran ese usuario y rol.
-- Q: ¿Qué efecto debe tener el rechazo manual de una inspección por parte del Jefe de Calidad? → A: Fija el dictamen en `failed`, registra motivo, usuario y fecha, y asegura una no conformidad `open` asociada; la inspección permanece `completed`.
-- Q: ¿Qué condición debe cumplirse para cerrar una no conformidad y retirar el lote de cuarentena? → A: Solo cuando todas sus acciones CAPA estén `completed`; el Jefe de Calidad cierra con fecha y comentario, y el lote sale de cuarentena al cerrarse.
+- Q: Sin autenticación multiusuario en el MVP, ¿cómo se determina el usuario y el rol activo? → A: Mediante un selector "Rol de uso" en el dashboard (`jefe_calidad`, `inspector`, `gerente`), persistido en `localStorage`; el rol solo restringe el detalle individual por inspector (exclusivo de `jefe_calidad`) y no habilita ni registra otras acciones.
+- Q: ¿Qué efecto tiene cambiar el dictamen de una inspección existente (por ejemplo, a `failed`) por parte del Jefe de Calidad? → A: Registra justificación, usuario y fecha y conserva la inspección en estado `completed`; el cambio de dictamen no genera una no conformidad, que solo se crea al completar una inspección con dictamen `failed`.
+- Q: ¿Cuándo y cómo se cierra una no conformidad y sale el lote de cuarentena? → A: El cierre se registra fijando el estado de la no conformidad en `closed` (sin exigir que sus acciones CAPA estén `completed`); la cuarentena es una vista derivada y el lote sale de ella cuando sus no conformidades dejan de estar en `open` o `under_review`.
 - Q: Si un lote ya tiene una inspección en estado `draft`, ¿qué debe ocurrir cuando el Inspector inicia una inspección para ese mismo lote? → A: Se reanuda el borrador existente del mismo origen y plan, conservando las mediciones ya ingresadas y sin crear un duplicado.
+
+### Session 2026-11-15
+
+- Q: ¿Cuándo y bajo qué condiciones se cierra una no conformidad (NC)? → A: El cierre se registra fijando el estado de la NC en `closed` desde el formulario de no conformidades (estados `open`, `under_review`, `closed`); el código no ejecuta un cierre automático ni valida que las acciones CAPA estén `completed` para permitirlo.
+- Q: ¿Cuándo sale un lote del estado de cuarentena? → A: La cuarentena es una vista derivada: el lote figura mientras alguna de sus no conformidades esté en `open` o `under_review`, y sale de la vista cuando esas no conformidades pasan a `closed`.
+- Q: ¿Cómo termina o se resuelve una inspección con estado `conditional`? → A: Permanece `completed` y se lista en la bandeja de revisión del Jefe de Calidad; se resuelve cambiando su dictamen con justificación, usuario y fecha, y deja de listarse cuando su dictamen ya no es `conditional`.
+- Q: ¿Cambiar un dictamen existente a `failed` genera automáticamente una no conformidad? → A: No. La no conformidad automática solo se genera al completar una inspección con dictamen `failed`; el cambio de dictamen únicamente actualiza el dictamen y su auditoría, sin crear una no conformidad.
+- Q: ¿Cuáles son los estados de una acción CAPA y qué rol o condición la cierra? → A: Estados `pending`, `in_progress` y `completed`; se cierra fijando el estado en `completed` desde el formulario de CAPA, lo que registra la marca temporal de finalización. El código no restringe ese cambio por rol.
+- Q: ¿El estado `conditional` se contabiliza dentro del cálculo de la tasa de aprobación (KPI)? → A: Sí. Cuenta en el denominador (todas las inspecciones `completed`) pero no en el numerador (solo `passed`), por lo que se considera no aprobada y reduce la tasa.
+- Q: ¿Cómo se selecciona o cambia el rol de usuario activo (selector del dashboard)? → A: Con el selector "Rol de uso" (`jefe_calidad`, `inspector`, `gerente`), cuyo valor se persiste en `localStorage` (`erp_quality:viewer_role`) y vuelve a renderizar el dashboard al cambiar; el rol solo restringe el detalle individual por inspector, exclusivo de `jefe_calidad`.
+- Q: ¿Cómo funciona la navegación hacia Control de Calidad desde el módulo base del ERP (001)? → A: Mediante el grupo "Control de Calidad" de la barra lateral, que alterna la vista de calidad seleccionada y oculta las vistas del módulo base; la acción "Inspeccionar" de lotes pendientes abre la vista de inspecciones con el documento origen preseleccionado.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -104,12 +115,11 @@ Como Jefe de Calidad, quiero revisar las inspecciones condicionales y los lotes 
 
 1. **Given** una inspección con criterios críticos fallidos o sin medición, **When** el Jefe de Calidad intenta aprobarla, **Then** el sistema lo bloquea y explica el motivo.
 2. **Given** una inspección reprobada o condicional, **When** el Jefe de Calidad cambia el dictamen, **Then** el sistema exige una justificación, registra usuario y fecha del cambio, y no permite `passed` si hay criterios críticos fallidos o sin medición.
-3. **Given** una inspección que se rechaza manualmente, **When** el Jefe de Calidad confirma la acción con el motivo de rechazo, **Then** el sistema fija el dictamen en `failed`, registra motivo, usuario y fecha, y asegura una no conformidad `open` asociada sin cambiar el estado `completed` de la inspección.
+3. **Given** una inspección `completed`, **When** el Jefe de Calidad cambia su dictamen a `failed` con justificación, **Then** el sistema fija el dictamen en `failed`, registra justificación, usuario y fecha, conserva la inspección en estado `completed` y no genera una no conformidad automática.
 4. **Given** una inspección `conditional`, **When** se abre la bandeja de revisión, **Then** aparece marcada como pendiente de revisión del Jefe de Calidad.
 5. **Given** un lote con no conformidad `open` o `under_review`, **When** se abre la pestaña de cuarentena, **Then** la tabla muestra ID de lote, producto, severidad y tipo de defecto, y permite abrir la acción CAPA correspondiente.
 6. **Given** un lote en cuarentena sin CAPA, **When** el Jefe de Calidad asigna una acción, **Then** el lote se muestra como "Cuarentena - En tratamiento".
-7. **Given** una no conformidad con todas sus acciones CAPA `completed`, **When** el Jefe de Calidad la cierra con fecha y comentario, **Then** la no conformidad queda `closed` y el lote deja de aparecer en cuarentena.
-8. **Given** una no conformidad con al menos una acción CAPA no `completed` o sin CAPA, **When** el Jefe de Calidad intenta cerrarla, **Then** el sistema lo bloquea y explica el motivo.
+7. **Given** una no conformidad abierta o en revisión, **When** el Jefe de Calidad cambia su estado a `closed`, **Then** la no conformidad queda `closed` y el lote deja de aparecer en cuarentena, sin exigir que sus acciones CAPA estén `completed`.
 
 ---
 
@@ -161,7 +171,7 @@ Como Auditor o Gerente de Operaciones, quiero filtrar el historial de inspeccion
 - Intento de aprobar una inspección con criterios críticos fallidos o sin medición: se bloquea y se informa el motivo.
 - Acción CAPA sin responsable, descripción, causa raíz, tipo de acción o fecha límite: se rechaza.
 - Acción CAPA cuya fecha límite ya pasó: se marca como vencida, sin cambiar automáticamente su estado.
-- No conformidad sin CAPA o con alguna CAPA no `completed`: no puede cerrarse y el lote permanece en cuarentena.
+- Cierre de una no conformidad: se registra fijando su estado en `closed` desde el formulario (sin exigir CAPA `completed`); al cerrarse, el lote deja de aparecer en cuarentena.
 - Rango de fechas inválido en el historial (desde posterior a hasta): se informa y no se aplica el filtro.
 - Eliminación de una inspección con no conformidad asociada: se bloquea para preservar la trazabilidad.
 - Eliminación de una no conformidad con acciones CAPA: se eliminan sus acciones CAPA en cascada.
@@ -169,6 +179,7 @@ Como Auditor o Gerente de Operaciones, quiero filtrar el historial de inspeccion
 - Consulta de métricas individuales por inspector sin rol de jefatura: se limita al nivel agregado.
 - Lote sin inspección completada: se muestra como pendiente, aunque exista una inspección en estado `draft`; al inspeccionarlo se reanuda el borrador del mismo origen y plan.
 - Origen y plan con más de una inspección `draft` por datos previos: se reanuda la más reciente y se advierte la inconsistencia sin crear otra.
+- Cambio manual del dictamen de una inspección existente a `failed`: no genera una no conformidad automática; solo completar una inspección con dictamen `failed` la genera.
 
 ## Requirements *(mandatory)*
 
@@ -201,16 +212,19 @@ Como Auditor o Gerente de Operaciones, quiero filtrar el historial de inspeccion
 - **FR-025**: El sistema MUST conservar la trazabilidad desde la inspección y sus resultados hasta el cierre de la no conformidad y sus acciones CAPA.
 - **FR-026**: El sistema MUST preservar la integridad de los datos con las siguientes reglas: planes o criterios con inspecciones históricas no se editan ni eliminan; una inspección con no conformidad no se elimina; una no conformidad con CAPA elimina sus CAPA en cascada; una inspección sin no conformidad elimina sus resultados en cascada.
 - **FR-027**: El sistema MUST mantener disponibles los datos registrados entre sesiones de uso.
-- **FR-028**: El sistema MUST presentar métricas agregadas por producto o etapa y limitar el detalle individual por inspector al rol de jefatura.
+- **FR-028**: El sistema MUST ofrecer en el dashboard de calidad un selector "Rol de uso" con los valores `jefe_calidad`, `inspector` y `gerente`, MUST persistir el valor seleccionado en `localStorage` (`erp_quality:viewer_role`) y MUST volver a renderizar el dashboard al cambiarlo. Las métricas agregadas MUST mostrarse a todos los roles y el detalle individual por inspector MUST quedar limitado al rol `jefe_calidad`; el rol seleccionado MUST NOT habilitar ni restringir otras acciones.
 - **FR-029**: El sistema MUST marcar las inspecciones con dictamen `conditional` en una bandeja de revisión del Jefe de Calidad, sin generar una no conformidad automática.
 - **FR-030**: El sistema MUST mostrar una vista de lotes pendientes con ID de lote, producto, fecha, estado y una acción para iniciar la inspección.
 - **FR-031**: El sistema MUST mostrar en una vista o pestaña de cuarentena los lotes con no conformidades en estado `open` o `under_review`, incluyendo ID de lote, producto, severidad, tipo de defecto y acceso a la acción CAPA.
 - **FR-032**: El sistema MUST registrar usuario y fecha cuando el Jefe de Calidad cambia un dictamen, y MUST conservar ese registro en el historial.
 - **FR-033**: El sistema MUST permitir seleccionar solo planes cuyo producto y etapa coincidan con el documento origen, derivando la etapa del módulo de origen (`goods_receipt` → `incoming`, `production_order` → `in_process`, `shipment` → `final`) y tomando el producto del documento origen.
-- **FR-034**: El sistema MUST ofrecer un selector de usuario/rol activo (`Inspector`, `Jefe de Calidad`, `Gerente/Auditor`) persistido localmente, MUST usar ese rol para habilitar las acciones de jefatura y MUST registrar el usuario y rol activos en las acciones sensibles.
-- **FR-035**: El sistema MUST permitir al Jefe de Calidad rechazar manualmente una inspección `completed`: MUST exigir el motivo de rechazo, fijar el dictamen en `failed`, registrar motivo, usuario y fecha, garantizar una no conformidad `open` asociada y conservar la inspección en estado `completed`.
-- **FR-036**: El sistema MUST permitir cerrar una no conformidad solo cuando todas sus acciones CAPA estén `completed`, exigiendo fecha y comentario de cierre; al cerrarse, el lote MUST dejar de mostrarse en cuarentena.
-- **FR-037**: El sistema MUST reanudar el borrador existente cuando se inicie una inspección para un origen y plan que ya tienen una inspección `draft`, conservando sus mediciones y sin crear un duplicado.
+- **FR-034**: El sistema MUST NOT generar una no conformidad al cambiar manualmente el dictamen de una inspección existente (incluido a `failed`); la inspección MUST conservarse en estado `completed` y la generación automática de una no conformidad MUST ocurrir únicamente al completar una inspección con dictamen `failed`.
+- **FR-035**: El sistema MUST permitir cerrar una no conformidad fijando su estado en `closed` desde el formulario de no conformidades, sin condicionar el cierre a que sus acciones CAPA estén `completed`. La cuarentena MUST derivarse de las no conformidades en estado `open` o `under_review`: el lote MUST mostrarse mientras exista alguna, MUST mostrarse como "Cuarentena - En tratamiento" cuando la no conformidad tenga al menos una acción CAPA, y MUST dejar de mostrarse cuando esas no conformidades pasen a `closed`.
+- **FR-036**: El sistema MUST reanudar el borrador existente cuando se inicie una inspección para un origen y plan que ya tienen una inspección `draft`, conservando sus mediciones y sin crear un duplicado.
+- **FR-037**: El sistema MUST resolver una inspección con dictamen `conditional` mediante el cambio de dictamen del Jefe de Calidad (con justificación, usuario y fecha), conservando la inspección en estado `completed`, y MUST retirarla de la bandeja de revisión cuando su dictamen deje de ser `conditional`.
+- **FR-038**: El sistema MUST permitir fijar el estado de una acción CAPA (`pending`, `in_progress`, `completed`) desde el formulario de CAPA; al pasar a `completed` MUST registrar la marca temporal de finalización, y el cambio de estado MUST NOT estar restringido por rol.
+- **FR-039**: El sistema MUST calcular la tasa de aprobación como la proporción de inspecciones `passed` sobre el total de inspecciones `completed`, de modo que las inspecciones `conditional` cuenten en el denominador pero no como aprobadas.
+- **FR-040**: El sistema MUST permitir navegar a Control de Calidad desde el grupo "Control de Calidad" de la barra lateral del módulo base, alternando la vista de calidad seleccionada y ocultando las vistas del módulo base; la acción "Inspeccionar" de la vista de lotes pendientes MUST abrir la vista de inspecciones con el documento origen preseleccionado.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -250,7 +264,7 @@ Como Auditor o Gerente de Operaciones, quiero filtrar el historial de inspeccion
 
 ## Assumptions
 
-- El módulo se usa en una sola organización y no requiere autenticación multiusuario en el MVP; el usuario y rol activos se seleccionan en la interfaz y se persisten localmente, y las acciones sensibles registran esa identidad.
+- El módulo se usa en una sola organización y no requiere autenticación multiusuario en el MVP; el usuario y rol activos se seleccionan en la interfaz y se persisten localmente; el rol solo restringe el detalle individual por inspector.
 - Los productos, empleados, recepciones, órdenes de producción y despachos son dependencias externas provistas como datos semilla para pruebas y demo.
 - Las tolerancias se interpretan como límites inclusivos y los valores medidos son numéricos.
 - El volumen esperado es de hasta 500 inspecciones almacenadas; volúmenes mayores quedan fuera del MVP.
