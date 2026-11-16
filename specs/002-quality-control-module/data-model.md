@@ -11,6 +11,7 @@ Este documento define las estructuras de datos para gestionar el control de cali
 El módulo se integra con productos, empleados, recepciones, órdenes de producción y despachos. Estas entidades son dependencias de otros módulos ERP; no se consideran creadas por este modelo de Control de Calidad. El "lote" de las historias de usuario se representa mediante el documento origen (`reference_module` + `reference_id`); no existe una entidad de lote separada.
 
 ## 2. Diagrama entidad-relación
+![Modelo Entidad-Relación](mer.png)
 
 ```mermaid
 erDiagram
