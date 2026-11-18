@@ -13,6 +13,8 @@ export async function bootQualityApp(){
   globalThis.window = w;
   globalThis.document = w.document;
   globalThis.localStorage = w.localStorage;
+  globalThis.FileReader = w.FileReader;
+  globalThis.File = w.File;
   globalThis.alert = vi.fn();
   globalThis.confirm = vi.fn(() => true);
   w.scrollTo = vi.fn();

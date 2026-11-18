@@ -7,7 +7,9 @@ import {
   updateInspection,
   saveDraftInspection,
   completeInspection,
-  validateInspection
+  validateInspection,
+  evidenceFor,
+  deleteEvidence
 } from '../storage.js';
 import { evaluateInspection } from '../inspection-engine.js';
 import {
@@ -17,9 +19,11 @@ import {
   moduleLabel,
   stageLabel,
   resultLabel,
+  statusLabel,
   todayIso,
   qs
 } from './quality-utils.js';
+import { addEvidenceFromFile, downloadEvidence, renderEvidenceList } from './evidence.js';
 
 const INSPECTION_ERROR_FIELDS = {
   inspection_plan_id: 'error-inspection-plan',
@@ -84,6 +88,7 @@ export function clearInspectionErrors(){
 }
 
 function populateSelect(select, records, valueKey, labelKey, blankLabel){
+  if(!select) return;
   const prev = select.value;
   select.innerHTML = '';
   const blank = document.createElement('option');
@@ -258,6 +263,7 @@ export function resetInspectionForm(options = {}){
   const verdict = qs('inspection-verdict');
   if(verdict){ verdict.hidden = true; verdict.textContent = ''; }
   renderMeasurements(qs('inspection-plan').value);
+  renderInspectionEvidence();
   if(!options.keepMessage){
     const errorEl = qs('inspection-error');
     if(errorEl) errorEl.textContent = '';
@@ -271,6 +277,7 @@ export function handleSaveDraft(){
   if(!saved) return null;
   showDraftSaved();
   renderDrafts();
+  renderInspectionEvidence();
   return saved;
 }
 
@@ -308,7 +315,10 @@ export function handleCompleteInspection(){
   verdict.hidden = false;
   verdict.className = `verdict ${overall === 'passed' ? 'verdict-pass' : overall === 'failed' ? 'verdict-fail' : 'verdict-conditional'}`;
   verdict.textContent = message;
+  const evidenceSelect = qs('inspection-evidence-inspection');
+  if(evidenceSelect) evidenceSelect.value = built.inspection_id;
   renderDrafts();
+  renderInspectionEvidence();
   return built;
 }
 
@@ -321,6 +331,9 @@ function loadDraft(inspection){
   qs('inspection-date').value = inspection.inspection_date;
   const results = loadCollection('quality_inspection_results').filter(r => r.inspection_id === inspection.inspection_id);
   renderMeasurements(inspection.inspection_plan_id, results);
+  const evidenceSelect = qs('inspection-evidence-inspection');
+  if(evidenceSelect) evidenceSelect.value = inspection.inspection_id;
+  renderInspectionEvidence();
   previewEvaluation();
   const error = qs('inspection-error');
   if(error){ error.textContent = `Borrador cargado (${inspection.reference_id}).`; error.classList.add('info'); }
@@ -354,6 +367,84 @@ export function renderDrafts(){
   });
 }
 
+export function renderInspectionEvidence(){
+  const select = qs('inspection-evidence-inspection');
+  if(!select) return;
+  const currentId = select.value || qs('inspection-id').value;
+  const inspections = loadCollection('quality_inspections');
+  populateSelect(
+    select,
+    inspections,
+    'inspection_id',
+    inspection => `${moduleLabel(inspection.reference_module)} ${inspection.reference_id} · ${statusLabel(inspection.inspection_status)}`,
+    inspections.length ? '-- Selecciona una inspección --' : '-- No hay inspecciones registradas --'
+  );
+  if(currentId && [...select.options].some(option => option.value === currentId)){
+    select.value = currentId;
+  }
+  const records = select.value ? evidenceFor('inspection', select.value) : [];
+  renderEvidenceList(
+    qs('inspection-evidence-list'),
+    records,
+    buildReferenceMaps(),
+    {
+      emptyMessage: select.value
+        ? 'Sin evidencia adjunta para esta inspección.'
+        : 'Selecciona una inspección para ver o adjuntar evidencia.'
+    }
+  );
+}
+
+async function handleInspectionEvidenceSubmit(event){
+  event.preventDefault();
+  const error = qs('inspection-evidence-error');
+  if(error) error.textContent = '';
+  const entityId = qs('inspection-evidence-inspection').value;
+  const uploadedBy = qs('inspection-evidence-author').value;
+  const fileInput = qs('inspection-evidence-file');
+  const file = fileInput.files && fileInput.files[0];
+  try{
+    await addEvidenceFromFile({
+      entityType: 'inspection',
+      entityId,
+      file,
+      uploadedBy
+    });
+    fileInput.value = '';
+    renderInspectionEvidence();
+  }catch(err){
+    if(error) error.textContent = err.message;
+  }
+}
+
+function handleInspectionEvidenceClick(event){
+  const button = event.target.closest('button');
+  if(!button) return;
+  if(button.dataset.evidenceDownload){
+    const record = loadCollection('quality_evidence')
+      .find(item => item.id === button.dataset.evidenceDownload);
+    if(record){
+      try{
+        downloadEvidence(record);
+      }catch(err){
+        const error = qs('inspection-evidence-error');
+        if(error) error.textContent = err.message;
+      }
+    }
+    return;
+  }
+  if(button.dataset.evidenceDelete){
+    if(!confirm('¿Eliminar esta evidencia?')) return;
+    try{
+      deleteEvidence(button.dataset.evidenceDelete);
+      renderInspectionEvidence();
+    }catch(err){
+      const error = qs('inspection-evidence-error');
+      if(error) error.textContent = err.message;
+    }
+  }
+}
+
 export function renderInspectionView(){
   const planSelect = qs('inspection-plan');
   if(!planSelect) return;
@@ -366,6 +457,13 @@ export function renderInspectionView(){
   renderReferenceOptions(module);
 
   if(!qs('inspection-date').value) qs('inspection-date').value = todayIso();
+  populateSelect(
+    qs('inspection-evidence-author'),
+    loadExternal('employees'),
+    'employee_id',
+    employee => employee.name,
+    '-- Selecciona un autor --'
+  );
 
   const existingResults = [];
   const inspectionId = qs('inspection-id').value;
@@ -377,6 +475,7 @@ export function renderInspectionView(){
   renderMeasurements(planSelect.value, existingResults);
   previewEvaluation();
   renderDrafts();
+  renderInspectionEvidence();
 }
 
 export function startInspection(referenceModule, referenceId){
@@ -416,4 +515,7 @@ export function initInspectionEngine(){
     const inspection = loadCollection('quality_inspections').find(i => i.inspection_id === btn.dataset.draftId);
     if(inspection) loadDraft(inspection);
   });
+  qs('inspection-evidence-form').addEventListener('submit', handleInspectionEvidenceSubmit);
+  qs('inspection-evidence-inspection').addEventListener('change', () => renderInspectionEvidence());
+  qs('inspection-evidence-list').addEventListener('click', handleInspectionEvidenceClick);
 }

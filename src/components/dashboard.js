@@ -1,6 +1,58 @@
 import { getConfig } from '../module-config.js';
-import { loadEntities, loadDocuments, loadCollection, isCapaOverdue } from '../storage.js';
-import { qs, stageLabel, buildReferenceMaps, productName, employeeName } from './quality-utils.js';
+import {
+  loadEntities,
+  loadDocuments,
+  loadCollection,
+  isCapaOverdue,
+  addAlertRule,
+  updateAlertRule,
+  deleteAlertRule,
+  deriveAlerts
+} from '../storage.js';
+import {
+  qs,
+  stageLabel,
+  buildReferenceMaps,
+  productName,
+  employeeName,
+  todayIso,
+  actionButton
+} from './quality-utils.js';
+import { rowsToCsv, downloadContent, safeFilenamePart } from './csv.js';
+
+const ALERT_METRIC_LABELS = Object.freeze({
+  approval_rate: 'Tasa de aprobación',
+  open_non_conformances: 'No conformidades abiertas',
+  overdue_capa: 'Acciones CAPA vencidas',
+  capa_effectiveness: 'Eficacia CAPA',
+  pending_inspections: 'Inspecciones pendientes'
+});
+
+const ALERT_OPERATOR_LABELS = Object.freeze({
+  lt: '<',
+  lte: '≤',
+  gt: '>',
+  gte: '≥',
+  eq: '='
+});
+
+const ALERT_SEVERITY_LABELS = Object.freeze({
+  info: 'Informativa',
+  warning: 'Advertencia',
+  critical: 'Crítica'
+});
+
+function alertMetricLabel(metric){
+  return ALERT_METRIC_LABELS[metric] || metric || '';
+}
+
+function alertOperatorLabel(operator){
+  return ALERT_OPERATOR_LABELS[operator] || operator || '';
+}
+
+function alertSeverityLabel(severity){
+  return ALERT_SEVERITY_LABELS[severity] || severity || '';
+}
 
 export function recordCounts(){
   return {
@@ -157,6 +209,212 @@ export function qualityMetrics(){
   };
 }
 
+export function kpiValues(metrics){
+  return {
+    approval_rate: metrics.approvalRate,
+    open_non_conformances: metrics.openNcs.length,
+    overdue_capa: metrics.overdueCapas.length,
+    capa_effectiveness: metrics.capaEffectiveness,
+    pending_inspections: metrics.drafts.length
+  };
+}
+
+export function buildDashboardCsv(metrics){
+  const rows = [['Indicador', 'Valor']];
+  rows.push(['Tasa de aprobación global', `${metrics.approvalRate}%`]);
+  [...metrics.approvalByStage.entries()].forEach(([stage, entry]) => {
+    const value = entry.total ? Math.round((entry.passed / entry.total) * 1000) / 10 : 0;
+    rows.push([`Tasa de aprobación - ${stageLabel(stage)}`, `${value}%`]);
+  });
+  rows.push(['No conformidades abiertas - Crítica', metrics.ncBySeverity.critical]);
+  rows.push(['No conformidades abiertas - Mayor', metrics.ncBySeverity.major]);
+  rows.push(['No conformidades abiertas - Menor', metrics.ncBySeverity.minor]);
+  rows.push(['Acciones CAPA vencidas', metrics.overdueCapas.length]);
+  rows.push(['Eficacia CAPA', `${metrics.capaEffectiveness}%`]);
+  rows.push(['Inspecciones pendientes', metrics.drafts.length]);
+  return rowsToCsv(rows);
+}
+
+export function exportDashboardCsv(){
+  const error = qs('dashboard-export-error');
+  if(error) error.textContent = '';
+  const metrics = qualityMetrics();
+  const hasData = metrics.completed.length > 0
+    || metrics.ncs.length > 0
+    || metrics.capas.length > 0
+    || metrics.drafts.length > 0;
+  if(!hasData){
+    if(error) error.textContent = 'No hay datos de calidad para exportar.';
+    return null;
+  }
+  const content = buildDashboardCsv(metrics);
+  const filename = `calidad_kpis_${safeFilenamePart(todayIso())}.csv`;
+  try{
+    downloadContent(content, filename);
+  }catch(err){
+    if(error) error.textContent = err.message;
+    return null;
+  }
+  return content;
+}
+
+function showAlertError(message){
+  const error = qs('alert-error');
+  if(error) error.textContent = message || '';
+}
+
+function collectAlertPayload(){
+  return {
+    metric: qs('alert-metric').value,
+    operator: qs('alert-operator').value,
+    threshold: qs('alert-threshold').value,
+    severity: qs('alert-severity').value,
+    is_active: qs('alert-active').checked
+  };
+}
+
+export function resetAlertForm(){
+  qs('alert-id').value = '';
+  qs('alert-metric').value = 'approval_rate';
+  qs('alert-operator').value = 'lt';
+  qs('alert-threshold').value = '';
+  qs('alert-severity').value = 'warning';
+  qs('alert-active').checked = true;
+  qs('alert-cancel').hidden = true;
+  showAlertError('');
+}
+
+function startAlertEdit(rule){
+  qs('alert-id').value = rule.id;
+  qs('alert-metric').value = rule.metric;
+  qs('alert-operator').value = rule.operator;
+  qs('alert-threshold').value = rule.threshold;
+  qs('alert-severity').value = rule.severity;
+  qs('alert-active').checked = rule.is_active !== false;
+  qs('alert-cancel').hidden = false;
+  showAlertError('');
+  qs('alert-threshold').focus();
+}
+
+function renderAlerts(metrics){
+  const container = qs('quality-alerts');
+  if(!container) return;
+  const alerts = deriveAlerts(kpiValues(metrics));
+  if(alerts.length === 0){
+    clearAndMessage(container, 'Sin alertas: todas las reglas activas se cumplen o no hay reglas configuradas.');
+    return;
+  }
+  resetContainer(container);
+  alerts.forEach(rule => {
+    const item = document.createElement('div');
+    item.className = 'alert-item';
+    const badge = document.createElement('span');
+    badge.className = `status-badge badge-${rule.severity}`;
+    badge.textContent = alertSeverityLabel(rule.severity);
+    item.appendChild(badge);
+    const text = document.createElement('span');
+    text.textContent = `${alertMetricLabel(rule.metric)}: ${rule.value} ${alertOperatorLabel(rule.operator)} ${rule.threshold}`;
+    item.appendChild(text);
+    container.appendChild(item);
+  });
+}
+
+function renderAlertRules(){
+  const container = qs('alert-rule-list');
+  if(!container) return;
+  container.innerHTML = '';
+  const rules = loadCollection('quality_alert_rules');
+  if(rules.length === 0){
+    container.className = 'empty';
+    container.textContent = 'No hay reglas de alerta configuradas.';
+    return;
+  }
+  container.className = '';
+  rules.forEach(rule => {
+    const item = document.createElement('div');
+    item.className = 'alert-rule-item';
+
+    const info = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = `${alertMetricLabel(rule.metric)} ${alertOperatorLabel(rule.operator)} ${rule.threshold}`;
+    info.appendChild(title);
+    const meta = document.createElement('div');
+    meta.className = 'muted';
+    meta.textContent = `${alertSeverityLabel(rule.severity)} · ${rule.is_active !== false ? 'Activa' : 'Inactiva'}`;
+    info.appendChild(meta);
+    item.appendChild(info);
+
+    const actions = document.createElement('div');
+    actions.className = 'table-actions';
+    actions.appendChild(actionButton('Editar', 'secondary', { alertEdit: rule.id }));
+    actions.appendChild(actionButton(
+      rule.is_active !== false ? 'Desactivar' : 'Activar',
+      'secondary',
+      { alertToggle: rule.id }
+    ));
+    actions.appendChild(actionButton('Eliminar', 'danger', { alertDelete: rule.id }));
+    item.appendChild(actions);
+    container.appendChild(item);
+  });
+}
+
+function handleAlertSubmit(event){
+  event.preventDefault();
+  const id = qs('alert-id').value;
+  const payload = collectAlertPayload();
+  try{
+    if(id) updateAlertRule(id, payload);
+    else addAlertRule(payload);
+    resetAlertForm();
+    renderQualityDashboard();
+  }catch(err){
+    showAlertError(err.message);
+  }
+}
+
+function handleAlertRuleClick(event){
+  const button = event.target.closest('button');
+  if(!button) return;
+  const rules = loadCollection('quality_alert_rules');
+  if(button.dataset.alertEdit){
+    const rule = rules.find(item => item.id === button.dataset.alertEdit);
+    if(rule) startAlertEdit(rule);
+    return;
+  }
+  if(button.dataset.alertToggle){
+    const rule = rules.find(item => item.id === button.dataset.alertToggle);
+    if(!rule) return;
+    try{
+      updateAlertRule(rule.id, { is_active: rule.is_active === false });
+      renderQualityDashboard();
+    }catch(err){
+      showAlertError(err.message);
+    }
+    return;
+  }
+  if(button.dataset.alertDelete){
+    if(!confirm('¿Eliminar esta regla de alerta?')) return;
+    try{
+      deleteAlertRule(button.dataset.alertDelete);
+      if(qs('alert-id').value === button.dataset.alertDelete) resetAlertForm();
+      renderQualityDashboard();
+    }catch(err){
+      showAlertError(err.message);
+    }
+  }
+}
+
+export function initQualityAlerts(){
+  const form = qs('alert-form');
+  if(!form || form.dataset.wired === 'true') return;
+  form.dataset.wired = 'true';
+  form.addEventListener('submit', handleAlertSubmit);
+  qs('alert-cancel').addEventListener('click', resetAlertForm);
+  qs('alert-rule-list').addEventListener('click', handleAlertRuleClick);
+  const exportButton = qs('dashboard-export');
+  if(exportButton) exportButton.addEventListener('click', () => exportDashboardCsv());
+}
+
 function renderApprovalByStage(metrics){
   const container = qs('quality-approval-by-stage');
   if(!container) return;
@@ -233,6 +491,8 @@ export function renderQualityDashboard(){
 
   renderApprovalByStage(metrics);
   renderNcBySeverity(metrics);
+  renderAlerts(metrics);
+  renderAlertRules();
 
   const maps = buildReferenceMaps();
   renderRanking(

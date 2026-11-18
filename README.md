@@ -160,8 +160,17 @@ All tailoring lives in one place: the `userConfig` object at the top of `src/mod
 
 If the configuration is invalid (unknown types, bad keys, transitions referencing unknown statuses, non-hex accent colors), the app shows the problems in a banner and falls back to defaults instead of breaking.
 
+## Quality Control Module
+
+The quality views add inspection plans, inspections, non-conformances, CAPA actions, audit evidence, CSV exports, and configurable dashboard alerts.
+
+- **CSV export** - the history exports the filtered inspections with a `resultados` column formatted as `criterio:medido:cumple` separated by `;`. The dashboard exports the current KPI summary. Invalid date ranges and empty result sets are rejected with a visible message.
+- **Evidence** - inspections and non-conformances accept PNG, JPG, or PDF files up to 5 MB each and 8 MB accumulated. Evidence stores the author, upload date, and base64 content in `localStorage`; evidence is removed in cascade when its inspection (without a non-conformance) or non-conformance is deleted.
+- **Alerts** - the dashboard stores alert rules with metric, operator, threshold, severity, and active status. Active rules are evaluated whenever the dashboard opens or refreshes. Rules can be edited, deactivated, or deleted; duplicate active rules for the same metric and operator are rejected.
+
 ## Notes
 
 - Data is persisted to `localStorage` under the keys `erp_base_module:entities` and `erp_base_module:documents`.
+- Quality data uses the `erp_quality:*` keys, including `quality_evidence` and `quality_alert_rules`.
 - Deleting an entity also deletes its documents (cascade).
 - This project intentionally uses vanilla HTML, CSS, and JavaScript for simplicity.

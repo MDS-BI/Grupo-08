@@ -202,13 +202,13 @@
 
 ### Pruebas para User Story 7
 
-- [ ] T065 [P] [US7] Escribir pruebas de integración de exportación del historial filtrado (incluida la columna `resultados`) y del resumen de KPIs, incluyendo filtros inválidos y ausencia de datos, en `tests/integration/quality-export.test.js` (FR-041, FR-042, SC-012).
+- [x] T065 [P] [US7] Escribir pruebas de integración de exportación del historial filtrado (incluida la columna `resultados`) y del resumen de KPIs, incluyendo filtros inválidos y ausencia de datos, en `tests/integration/quality-export.test.js` (FR-041, FR-042, SC-012).
 
 ### Implementación para User Story 7
 
-- [ ] T066 [US7] Implementar en `src/components/inspection-history.js` la exportación CSV UTF-8 del historial filtrado con lote, producto, plan, etapa, fecha, inspector, dictamen, estado y una columna `resultados` (`criterio:medido:cumple` separado por `;`), respetando los filtros activos y bloqueando rangos de fechas inválidos (FR-041).
-- [ ] T067 [US7] Implementar en `src/components/dashboard.js` la exportación CSV del resumen de KPIs (tasa por etapa, no conformidades abiertas por severidad, CAPA vencidas, eficacia CAPA e inspecciones pendientes) e informar cuando no haya datos (FR-042).
-- [ ] T068 [US7] Implementar en `src/components/quality-utils.js` el generador de nombre de archivo y descarga CSV reutilizable (módulo, fecha de generación y filtros aplicados) para historial y dashboard (FR-041, FR-042).
+- [x] T066 [US7] Implementar en `src/components/inspection-history.js` la exportación CSV UTF-8 del historial filtrado con lote, producto, plan, etapa, fecha, inspector, dictamen, estado y una columna `resultados` (`criterio:medido:cumple` separado por `;`), respetando los filtros activos y bloqueando rangos de fechas inválidos (FR-041).
+- [x] T067 [US7] Implementar en `src/components/dashboard.js` la exportación CSV del resumen de KPIs (tasa por etapa, no conformidades abiertas por severidad, CAPA vencidas, eficacia CAPA e inspecciones pendientes) e informar cuando no haya datos (FR-042).
+- [x] T068 [US7] Implementar en `src/components/quality-utils.js` el generador de nombre de archivo y descarga CSV reutilizable (módulo, fecha de generación y filtros aplicados) para historial y dashboard (FR-041, FR-042).
 
 **Checkpoint**: US7 queda exportable y verificable de forma independiente.
 
@@ -224,15 +224,15 @@
 
 ### Pruebas para User Story 8
 
-- [ ] T069 [P] [US8] Escribir pruebas de integración de adjuntar, listar, descargar y eliminar evidencia en inspecciones y no conformidades, incluyendo tipo/tamaño inválido, límite acumulado/cuota y cascadas, en `tests/integration/quality-evidence.test.js` (FR-043, FR-044, SC-013, SC-015).
+- [x] T069 [P] [US8] Escribir pruebas de integración de adjuntar, listar, descargar y eliminar evidencia en inspecciones y no conformidades, incluyendo tipo/tamaño inválido, límite acumulado/cuota y cascadas, en `tests/integration/quality-evidence.test.js` (FR-043, FR-044, SC-013, SC-015).
 
 ### Implementación para User Story 8
 
-- [ ] T070 [US8] Extender `src/storage.js` con la colección `quality_evidence` (nombre, tipo, tamaño, contenido data URL base64, autor, fecha y vínculo polimórfico a inspección o no conformidad), sus operaciones CRUD, la validación de MIME PNG/JPG/PDF, 5 MB por archivo, 8 MB acumulados y manejo de cuota, y la validación del vínculo (FR-043, FR-044, SC-015).
-- [ ] T071 [US8] Implementar en `src/components/inspection-engine.js` la carga de evidencia en inspecciones `draft`/`completed` con validación de MIME PNG/JPG/PDF, 5 MB por archivo, 8 MB acumulados, cuota y autor (FR-043).
-- [ ] T072 [US8] Implementar en `src/components/non-conformance-capa.js` la carga, autor y visualización de evidencia en no conformidades con los mismos límites y validaciones (FR-043).
-- [ ] T073 [US8] Implementar en `src/storage.js` las reglas de cascada y bloqueo de evidencia al eliminar inspecciones o no conformidades, y en `src/components/inspection-history.js` el listado y descarga de la evidencia vinculada (FR-044, FR-026).
-- [ ] T074 [US8] Agregar en `src/components/inspection-engine.js` y `src/components/non-conformance-capa.js` los estados vacíos y mensajes de validación de evidencia.
+- [x] T070 [US8] Extender `src/storage.js` con la colección `quality_evidence` (nombre, tipo, tamaño, contenido data URL base64, autor, fecha y vínculo polimórfico a inspección o no conformidad), sus operaciones CRUD, la validación de MIME PNG/JPG/PDF, 5 MB por archivo, 8 MB acumulados y manejo de cuota, y la validación del vínculo (FR-043, FR-044, SC-015).
+- [x] T071 [US8] Implementar en `src/components/inspection-engine.js` la carga de evidencia en inspecciones `draft`/`completed` con validación de MIME PNG/JPG/PDF, 5 MB por archivo, 8 MB acumulados, cuota y autor (FR-043).
+- [x] T072 [US8] Implementar en `src/components/non-conformance-capa.js` la carga, autor y visualización de evidencia en no conformidades con los mismos límites y validaciones (FR-043).
+- [x] T073 [US8] Implementar en `src/storage.js` las reglas de cascada y bloqueo de evidencia al eliminar inspecciones o no conformidades, y en `src/components/inspection-history.js` el listado y descarga de la evidencia vinculada (FR-044, FR-026).
+- [x] T074 [US8] Agregar en `src/components/inspection-engine.js` y `src/components/non-conformance-capa.js` los estados vacíos y mensajes de validación de evidencia.
 
 **Checkpoint**: La evidencia queda trazable, validada y disponible para auditoría.
 
@@ -248,14 +248,14 @@
 
 ### Pruebas para User Story 9
 
-- [ ] T075 [P] [US9] Escribir pruebas de integración de configuración de reglas de alerta, validación de catálogo/rango, rechazo de duplicados, activación/desactivación/eliminación y visualización de alertas en el dashboard, en `tests/integration/quality-alerts.test.js` (FR-045, FR-046, FR-047, SC-014).
+- [x] T075 [P] [US9] Escribir pruebas de integración de configuración de reglas de alerta, validación de catálogo/rango, rechazo de duplicados, activación/desactivación/eliminación y visualización de alertas en el dashboard, en `tests/integration/quality-alerts.test.js` (FR-045, FR-046, FR-047, SC-014).
 
 ### Implementación para User Story 9
 
-- [ ] T076 [US9] Extender `src/storage.js` con la colección `quality_alert_rules` (indicador, operador, umbral, severidad y estado activo) y la validación de catálogos, rango por indicador (0–100 en tasas, ≥ 0 en conteos) y duplicados activos por indicador y operador (FR-045).
-- [ ] T077 [US9] Implementar en `src/components/dashboard.js` el formulario de configuración de reglas de alerta, con mensajes de validación visibles y acciones de activar, desactivar y eliminar (FR-045, FR-047).
-- [ ] T078 [US9] Implementar en `src/components/dashboard.js` la evaluación de reglas activas contra los KPIs y la visualización de alertas con indicador, valor actual, umbral y severidad, excluyendo reglas desactivadas o eliminadas (FR-046, FR-047).
-- [ ] T079 [US9] Persistir las reglas de alerta (activas e inactivas) entre sesiones y recalcular las alertas al abrir o actualizar el dashboard (FR-046, FR-047).
+- [x] T076 [US9] Extender `src/storage.js` con la colección `quality_alert_rules` (indicador, operador, umbral, severidad y estado activo) y la validación de catálogos, rango por indicador (0–100 en tasas, ≥ 0 en conteos) y duplicados activos por indicador y operador (FR-045).
+- [x] T077 [US9] Implementar en `src/components/dashboard.js` el formulario de configuración de reglas de alerta, con mensajes de validación visibles y acciones de activar, desactivar y eliminar (FR-045, FR-047).
+- [x] T078 [US9] Implementar en `src/components/dashboard.js` la evaluación de reglas activas contra los KPIs y la visualización de alertas con indicador, valor actual, umbral y severidad, excluyendo reglas desactivadas o eliminadas (FR-046, FR-047).
+- [x] T079 [US9] Persistir las reglas de alerta (activas e inactivas) entre sesiones y recalcular las alertas al abrir o actualizar el dashboard (FR-046, FR-047).
 
 **Checkpoint**: Las alertas reflejan los umbrales configurados y los datos almacenados.
 
@@ -273,7 +273,7 @@
 - [ ] T054 Ejecutar la validación funcional de `specs/002-quality-control-module/quickstart.md` con `npm run dev`.
 - [ ] T055 Ejecutar `/speckit.analyze` sobre `specs/002-quality-control-module/spec.md` y confirmar que no quedan hallazgos críticos ni altos.
 - [x] T080 [P] Actualizar `data-model.md`, `contracts/quality-storage.md`, `quickstart.md` y `plan.md` con las entidades `quality_evidence` y `quality_alert_rules`, las vistas de exportación/evidencia/alertas y sus KPIs asociados.
-- [ ] T081 [P] Ampliar `README.md` con exportación CSV (columna `resultados`), tipos y límites de evidencia (PNG/JPG/PDF, 5 MB por archivo, 8 MB acumulados y cuota) y configuración, desactivación y eliminación de reglas de alerta.
+- [x] T081 [P] Ampliar `README.md` con exportación CSV (columna `resultados`), tipos y límites de evidencia (PNG/JPG/PDF, 5 MB por archivo, 8 MB acumulados y cuota) y configuración, desactivación y eliminación de reglas de alerta.
 - [ ] T082 Validar el rendimiento de exportación con hasta 500 inspecciones en menos de 2 segundos, según SC-012 y `quickstart.md`.
 
 ---
