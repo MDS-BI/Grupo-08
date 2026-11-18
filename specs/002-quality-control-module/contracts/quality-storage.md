@@ -14,6 +14,8 @@ Cada colección se persiste como una lista bajo su propia clave:
 - `quality_inspection_results`
 - `non_conformances`
 - `corrective_actions`
+- `quality_evidence`
+- `quality_alert_rules`
 
 ## Formas de los Datos
 
@@ -92,6 +94,31 @@ Cada colección se persiste como una lista bajo su propia clave:
 - `status`: `pending` | `in_progress` | `completed`.
 - `createdAt` / `updatedAt`: marcas de tiempo ISO.
 
+### Evidencia de calidad
+
+- `id`: cadena única.
+- `evidence_id`: cadena única, generada automáticamente.
+- `entity_type`: `inspection` | `non_conformance`.
+- `entity_id`: cadena de una inspección o no conformidad existente según `entity_type`.
+- `file_name`: cadena no vacía con el nombre original del archivo.
+- `mime_type`: `image/png` | `image/jpeg` | `application/pdf`.
+- `size_bytes`: entero mayor que 0 y menor o igual a 5 242 880 (5 MB por archivo); la suma de toda la colección no debe superar 8 MB.
+- `data_url`: cadena no vacía con el contenido del archivo en data URL base64.
+- `uploaded_by`: cadena del empleado seleccionado como autor en el formulario de evidencia.
+- `uploaded_at`: marca de tiempo ISO de la carga.
+- `createdAt` / `updatedAt`: marcas de tiempo ISO.
+
+### Regla de alerta
+
+- `id`: cadena única.
+- `alert_rule_id`: cadena única, generada automáticamente.
+- `metric`: `approval_rate` | `open_non_conformances` | `overdue_capa` | `capa_effectiveness` | `pending_inspections`.
+- `operator`: `lt` | `lte` | `gt` | `gte` | `eq`.
+- `threshold`: número en el rango válido de la métrica (`approval_rate` y `capa_effectiveness`: 0–100; `open_non_conformances`, `overdue_capa` y `pending_inspections`: ≥ 0).
+- `severity`: `info` | `warning` | `critical`.
+- `is_active`: booleano; por defecto `true`; `false` desactiva la regla sin eliminarla.
+- `createdAt` / `updatedAt`: marcas de tiempo ISO.
+
 ## Operaciones
 
 - `loadCollection(name)`: devuelve la lista persistida de la colección.
@@ -99,9 +126,10 @@ Cada colección se persiste como una lista bajo su propia clave:
 - `addRecord(name, record)`: añade un registro generando su identificador.
 - `updateRecord(name, id, updates)`: actualiza un registro existente y su `updatedAt`.
 - `deleteRecord(name, id)`: elimina un registro por id.
-- `deleteRelated(name, foreignKey, id)`: elimina registros dependientes (por ejemplo, resultados de una inspección o CAPA de una no conformidad).
+- `deleteRelated(name, foreignKey, id)`: elimina registros dependientes (por ejemplo, resultados de una inspección, CAPA de una no conformidad o evidencia de una inspección/no conformidad).
 - `derivePendingLots(externalDocuments, inspections)`: devuelve los documentos origen sin inspección `completed`.
 - `deriveQuarantineLots(nonConformances, correctiveActions)`: devuelve los lotes con no conformidad `open`/`under_review` y el estado de tratamiento CAPA.
+- `deriveAlerts(kpis, alertRules)`: devuelve las reglas activas cuyo umbral se incumple con los KPIs calculados.
 
 ## Expectativas de Validación
 
@@ -114,13 +142,19 @@ Cada colección se persiste como una lista bajo su propia clave:
 - El borrador de no conformidad generado por `failed` debe tener descripción no vacía, producto del plan, tipo de defecto `other`, severidad inicial `major` y estado `open`.
 - Toda acción CAPA debe tener `responsible_employee_id`, `action_description`, `root_cause`, `action_type` y `due_date`.
 - Un plan o criterio con resultados históricos (`is_locked = true`) no puede editarse ni eliminarse.
-- Eliminar un plan sin inspecciones debe eliminar sus criterios; eliminar una inspección sin no conformidad debe eliminar sus resultados; eliminar una inspección con no conformidad debe bloquearse; eliminar una no conformidad debe eliminar sus acciones CAPA.
+- Eliminar un plan sin inspecciones debe eliminar sus criterios; eliminar una inspección sin no conformidad debe eliminar sus resultados y su evidencia; eliminar una inspección con no conformidad debe bloquearse; eliminar una no conformidad debe eliminar sus acciones CAPA y su evidencia.
+- La evidencia debe rechazarse si `entity_type` no es canónico, si `entity_id` no existe en la colección correspondiente, si `mime_type` no está permitido, si `size_bytes` supera los 5 MB, si `data_url` está vacío o si la carga excede el límite acumulado de 8 MB o la cuota de `localStorage`; en ese último caso se conserva la evidencia previa.
+- Una regla de alerta debe rechazarse si `metric`, `operator` o `severity` no son canónicos, si `threshold` no es numérico o está fuera del rango de la métrica, o si ya existe otra regla activa con el mismo `metric` y `operator`.
+- Desactivar una regla (`is_active = false`) o eliminarla debe dejar de mostrarla como alerta; eliminarla debe retirarla de la colección sin afectar las demás reglas.
+- La exportación no se persiste: el CSV UTF-8 del historial debe respetar los filtros activos e incluir la columna `resultados` con `criterio:medido:cumple` separado por `;`; el CSV de KPIs debe usar los mismos valores del dashboard y ambos deben generar un archivo con encabezado y nombre identificable.
 - Las operaciones deben preservar el orden de la lista y actualizar las marcas de tiempo.
-- Las vistas de dashboard, lotes pendientes, cuarentena, historial y revisión condicional deben mostrar un estado vacío claro cuando no haya registros.
+- Las vistas de dashboard, lotes pendientes, cuarentena, historial, revisión condicional, exportación, evidencia y alertas deben mostrar un estado vacío claro cuando no haya registros.
 
 ## Expectativas de Integración
 
 - Productos, empleados, recepciones, órdenes de producción y despachos no se crean en este módulo; se validan contra datos semilla (`src/seed-data.js`) o colecciones externas.
 - El "lote" es el documento origen (`reference_module` + `reference_id`); no existe una colección `lots`.
 - Los lotes pendientes se calculan comparando los documentos origen externos con las inspecciones `completed`.
+- La evidencia se vincula únicamente a inspecciones o no conformidades de este módulo y no crea ni modifica registros externos.
+- Las reglas de alerta y la exportación CSV son locales al módulo: se evalúan con los datos del dashboard y se generan en el navegador, sin servicios externos.
 - Si se adopta el modelo `INT` de `data-model.md`, el contrato debe ampliarse con una capa de mapeo explícita entre identificadores.

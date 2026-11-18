@@ -6,7 +6,7 @@
 
 ## 1. Propósito y alcance
 
-Este documento define las estructuras de datos para gestionar el control de calidad preventivo y operativo: planes y criterios de inspección, inspecciones, resultados, no conformidades y acciones correctivas o preventivas (CAPA).
+Este documento define las estructuras de datos para gestionar el control de calidad preventivo y operativo: planes y criterios de inspección, inspecciones, resultados, no conformidades y acciones correctivas o preventivas (CAPA). Además, modela la evidencia documental adjunta a inspecciones y no conformidades y las reglas de alerta configurables sobre los indicadores del dashboard.
 
 El módulo se integra con productos, empleados, recepciones, órdenes de producción y despachos. Estas entidades son dependencias de otros módulos ERP; no se consideran creadas por este modelo de Control de Calidad. El "lote" de las historias de usuario se representa mediante el documento origen (`reference_module` + `reference_id`); no existe una entidad de lote separada.
 
@@ -88,6 +88,25 @@ erDiagram
         date due_date
         varchar status
     }
+    QUALITY_EVIDENCE {
+        string evidence_id PK
+        string entity_type
+        string entity_id
+        varchar file_name
+        varchar mime_type
+        int size_bytes
+        text data_url
+        string uploaded_by
+        timestamp uploaded_at
+    }
+    QUALITY_ALERT_RULES {
+        string alert_rule_id PK
+        varchar metric
+        varchar operator
+        decimal threshold
+        varchar severity
+        boolean is_active
+    }
 
     PRODUCTS ||--o{ QUALITY_INSPECTION_PLANS : "define plan para"
     PRODUCTS ||--o{ NON_CONFORMANCES : "producto afectado"
@@ -99,6 +118,8 @@ erDiagram
     QUALITY_INSPECTIONS ||--|{ QUALITY_INSPECTION_RESULTS : "registra"
     QUALITY_INSPECTIONS ||--o{ NON_CONFORMANCES : "origina"
     NON_CONFORMANCES ||--o{ CORRECTIVE_ACTIONS : "requiere"
+    QUALITY_INSPECTIONS ||--o{ QUALITY_EVIDENCE : "evidencia de"
+    NON_CONFORMANCES ||--o{ QUALITY_EVIDENCE : "evidencia de"
     GOODS_RECEIPTS ||--o{ QUALITY_INSPECTIONS : "referencia polimorfica"
     PRODUCTION_ORDERS ||--o{ QUALITY_INSPECTIONS : "referencia polimorfica"
     SHIPMENTS ||--o{ QUALITY_INSPECTIONS : "referencia polimorfica"
@@ -197,6 +218,39 @@ Define las acciones correctivas o preventivas (CAPA) asociadas a no conformidade
 | `due_date` | DATE | — | Not Null | Fecha límite de implementación. |
 | `status` | VARCHAR | — | `pending`, `in_progress`, `completed` | Estado de la acción. |
 
+### 3.7 `quality_evidence`
+
+Almacena los archivos de respaldo adjuntos a inspecciones o no conformidades.
+
+| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+|---|---|---|---|---|
+| `evidence_id` | STRING | PK | Autogenerado | Identificador único de la evidencia. |
+| `entity_type` | VARCHAR | Polimórfica | `inspection`, `non_conformance` | Tipo de registro al que se vincula. |
+| `entity_id` | STRING | Polimórfica | ID de la inspección o no conformidad existente | Registro al que pertenece la evidencia. |
+| `file_name` | VARCHAR | — | Not Null | Nombre original del archivo. |
+| `mime_type` | VARCHAR | — | Not Null; `image/png`, `image/jpeg`, `application/pdf` | Tipo de archivo permitido. |
+| `size_bytes` | INT | — | Not Null, > 0 y <= 5242880 | Tamaño del archivo (máximo 5 MB). |
+| `data_url` | TEXT | — | Not Null; data URL base64 | Contenido del archivo para descarga local. |
+| `uploaded_by` | STRING | — | Not Null | Empleado o usuario que adjunta la evidencia. |
+| `uploaded_at` | TIMESTAMP | — | Not Null | Fecha y hora de la carga. |
+
+**Restricción acumulada:** la suma de `size_bytes` de toda la colección no debe superar 8 MB; si una carga excede ese límite o la cuota de `localStorage`, se rechaza y se conserva la evidencia existente.
+
+### 3.8 `quality_alert_rules`
+
+Define umbrales configurables sobre los indicadores del dashboard de calidad.
+
+| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+|---|---|---|---|---|
+| `alert_rule_id` | STRING | PK | Autogenerado | Identificador único de la regla. |
+| `metric` | VARCHAR | — | `approval_rate`, `open_non_conformances`, `overdue_capa`, `capa_effectiveness`, `pending_inspections` | Indicador del dashboard que se evalúa. |
+| `operator` | VARCHAR | — | `lt`, `lte`, `gt`, `gte`, `eq` | Operador de comparación del umbral. |
+| `threshold` | DECIMAL | — | Not Null; rango según la métrica | Valor límite de la regla. |
+| `severity` | VARCHAR | — | `info`, `warning`, `critical` | Severidad de la alerta. |
+| `is_active` | BOOLEAN | — | Default `true` | Indica si la regla se evalúa en el dashboard. |
+
+**Rangos de umbral:** `approval_rate` y `capa_effectiveness` admiten 0–100; `open_non_conformances`, `overdue_capa` y `pending_inspections` admiten valores ≥ 0.
+
 ## 4. Integración con otros módulos
 
 | Dato de Control de Calidad | Módulo de destino | Propósito |
@@ -229,9 +283,14 @@ Define las acciones correctivas o preventivas (CAPA) asociadas a no conformidade
 - **No conformidad automática:** una inspección `failed` genera un borrador `open` con tipo de defecto `other`, severidad `major`, producto del plan y descripción autogenerada de los criterios incumplidos.
 - **CAPA vencida:** una acción con `due_date` anterior a la fecha actual y `status != completed` se marca como vencida sin cambiar su estado.
 - **Bloqueo histórico:** un plan o criterio con resultados de inspección asociados tiene `is_locked = true` y no puede editarse ni eliminarse; el plan se duplica para crear una nueva versión.
-- **Eliminación:** plan sin inspecciones elimina sus criterios en cascada; inspección sin no conformidad elimina sus resultados en cascada; inspección con no conformidad no se elimina; no conformidad elimina sus CAPA en cascada.
+- **Eliminación:** plan sin inspecciones elimina sus criterios en cascada; inspección sin no conformidad elimina sus resultados y su evidencia en cascada; inspección con no conformidad no se elimina; no conformidad elimina sus CAPA y su evidencia en cascada.
 - **Lotes pendientes:** se derivan de los documentos origen externos que no tienen una inspección `completed`; una inspección `draft` no marca el lote como inspeccionado.
 - **Cuarentena:** un lote con al menos una no conformidad en estado `open` o `under_review` se muestra como retenido/en cuarentena; si tiene una CAPA asociada se muestra "Cuarentena - En tratamiento".
+- **Exportación:** es una vista derivada de los datos consultados. El historial en CSV UTF-8 incluye una columna `resultados` con `criterio:medido:cumple` separado por `;`, respeta los filtros activos y el resumen usa los mismos KPIs del dashboard; no se persiste una entidad de exportación.
+- **Evidencia:** un archivo se vincula a una inspección o no conformidad existente mediante `entity_type` + `entity_id`; se aceptan solo PNG/JPG/PDF de hasta 5 MB por archivo, con un máximo acumulado de 8 MB y manejo de cuota, y se rechazan tipos no permitidos, contenido vacío y vínculos a registros inexistentes.
+- **Alertas:** una regla activa se evalúa contra el KPI indicado al abrir o actualizar el dashboard; se validan indicadores, operadores, severidades y rangos (0–100 en tasas, ≥ 0 en conteos), y no se permite más de una regla activa por `metric` + `operator`.
+- **Desactivación de alertas:** una regla desactivada (`is_active = false`) o eliminada deja de mostrar su alerta; si se elimina, se retira del almacenamiento sin afectar otras reglas.
+- **Cascada de evidencia:** la evidencia se elimina en cascada con su inspección (sin no conformidad) o con su no conformidad; si la inspección tiene no conformidad, su eliminación se bloquea y la evidencia permanece. Las alertas son informativas y no generan no conformidades ni bloqueos.
 
 ## 6. Trazabilidad de no conformidades y CAPA
 

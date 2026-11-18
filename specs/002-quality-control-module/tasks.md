@@ -10,7 +10,7 @@
 ## Formato: `[ID] [P?] [Story] Descripción`
 
 - **[P]**: Puede ejecutarse en paralelo (archivos distintos, sin dependencia de tareas incompletas).
-- **[Story]**: Historia de usuario a la que pertenece la tarea (US1–US6).
+- **[Story]**: Historia de usuario a la que pertenece la tarea (US1–US9).
 - Cada descripción incluye la ruta de archivo exacta.
 
 ## Convenciones de rutas
@@ -38,7 +38,7 @@
 
 **⚠️ CRÍTICO**: Ninguna historia de usuario puede iniciar hasta completar esta fase.
 
-- [x] T005 Extender `src/storage.js` con las seis colecciones de calidad (`quality_inspection_plans`, `quality_inspection_criteria`, `quality_inspections`, `quality_inspection_results`, `non_conformances`, `corrective_actions`) y las operaciones `loadCollection`, `saveCollection`, `addRecord`, `updateRecord`, `deleteRecord` y `deleteRelated` del contrato.
+- [x] T005 Extender `src/storage.js` con las seis colecciones base de calidad (`quality_inspection_plans`, `quality_inspection_criteria`, `quality_inspections`, `quality_inspection_results`, `non_conformances`, `corrective_actions`) y las operaciones `loadCollection`, `saveCollection`, `addRecord`, `updateRecord`, `deleteRecord` y `deleteRelated` del contrato; `quality_evidence` y `quality_alert_rules` se añaden en T070/T076.
 - [x] T006 Implementar en `src/storage.js` la validación de `reference_module` (`goods_receipt`, `production_order`, `shipment`) y la existencia de `reference_id` contra las colecciones externas, rechazando referencias huérfanas.
 - [x] T007 Implementar en `src/storage.js` las funciones `derivePendingLots(externalDocuments, inspections)` y `deriveQuarantineLots(nonConformances, correctiveActions)`.
 - [x] T008 Registrar y conectar las vistas de calidad en `src/app.js` y `src/module-config.js`, incluyendo nombre, términos y navegación del módulo.
@@ -92,6 +92,10 @@
 - [x] T024 [US2] Implementar en `src/components/inspection-engine.js` la permanencia en `draft` cuando falte una medición o el valor no sea numérico, y el rechazo de referencias huérfanas o no permitidas.
 - [x] T025 [US2] Persistir resultados de inspección en `src/storage.js` y retirar el lote de la vista de pendientes al completar la inspección.
 - [x] T026 [US2] Agregar en `src/components/pending-lots.js` y `src/components/inspection-engine.js` los estados vacíos y mensajes de validación correspondientes.
+- [ ] T056 [P] [US2] Escribir pruebas de integración de coincidencia de plan por producto y etapa derivada del origen, y de reanudación de borrador existente sin duplicado, en `tests/integration/inspection-flow.test.js` (FR-033, FR-036).
+- [ ] T057 [US2] Implementar en `src/components/inspection-engine.js` el filtrado de planes habilitados por `product_id` del documento origen y `applicable_stage` derivada de `reference_module` (`goods_receipt` → `incoming`, `production_order` → `in_process`, `shipment` → `final`) (FR-033).
+- [ ] T058 [US2] Implementar en `src/components/inspection-engine.js` la reanudación del borrador `draft` existente para el mismo `reference_module`, `reference_id` e `inspection_plan_id`, conservando sus mediciones y sin crear un duplicado; si existen varios, reanudar el más reciente y advertir la inconsistencia (FR-036).
+- [ ] T059 [US2] Implementar en `src/components/pending-lots.js` y `src/app.js` la preselección del documento origen al usar la acción "Inspeccionar" y la apertura de la vista de inspecciones con ese origen (FR-040).
 
 **Checkpoint**: User Stories 1 y 2 funcionan de forma independiente.
 
@@ -115,6 +119,8 @@
 - [x] T031 [US3] Implementar en `src/components/non-conformance-capa.js` la marca visual de acciones CAPA vencidas sin cambiar automáticamente su estado.
 - [x] T032 [US3] Implementar en `src/storage.js` las reglas de integridad y trazabilidad: bloquear eliminación de inspección con no conformidad y eliminar CAPA en cascada al eliminar una no conformidad.
 - [x] T033 [US3] Agregar en `src/components/non-conformance-capa.js` los estados vacíos y mensajes de validación de no conformidad y CAPA.
+- [ ] T060 [P] [US3] Escribir prueba de integración que verifique que una acción CAPA registra `completed_at` al pasar a `completed` y que no lo registra en otros estados, en `tests/integration/non-conformance-capa.test.js` (FR-038).
+- [ ] T061 [US3] Implementar en `src/storage.js` y `src/components/non-conformance-capa.js` la marca temporal `completed_at` al fijar una acción CAPA en `completed`, conservándola al actualizar otros campos (FR-038).
 
 **Checkpoint**: La detección de fallas se convierte en no conformidad y acción CAPA trazable.
 
@@ -137,6 +143,7 @@
 - [x] T037 [US4] Implementar en `src/components/non-conformance-capa.js` el flujo de rechazo manual con confirmación y motivo obligatorio antes de guardar.
 - [x] T038 [US4] Implementar en `src/components/non-conformance-capa.js` la pestaña de cuarentena con ID de lote, producto, severidad, tipo de defecto, acceso a CAPA y estado "Cuarentena - En tratamiento" cuando exista una acción.
 - [x] T039 [US4] Agregar en `src/components/non-conformance-capa.js` los estados vacíos de revisión condicional y cuarentena.
+- [ ] T062 [P] [US4] Escribir prueba de integración que confirme que el cambio manual de dictamen a `failed` no genera no conformidad y conserva la inspección en `completed`, en `tests/integration/review-quarantine.test.js` (FR-034).
 
 **Checkpoint**: Las desviaciones condicionales y los lotes retenidos se resuelven con evidencia registrada.
 
@@ -158,6 +165,8 @@
 - [x] T042 [US5] Implementar en `src/components/dashboard.js` el análisis de Pareto de productos y etapas con mayor concentración de no conformidades.
 - [x] T043 [US5] Implementar en `src/components/dashboard.js` las métricas agregadas por producto o etapa y restringir el detalle individual por inspector al rol de jefatura.
 - [x] T044 [US5] Agregar en `src/components/dashboard.js` estados vacíos claros cuando no existan datos.
+- [ ] T063 [P] [US5] Escribir prueba de integración del selector "Rol de uso" (`erp_quality:viewer_role`), su persistencia en `localStorage`, el re-render al cambiar y la restricción del detalle por inspector al rol `jefe_calidad`, en `tests/integration/quality-dashboard.test.js` (FR-028).
+- [ ] T064 [US5] Implementar en `src/components/dashboard.js` el selector "Rol de uso" (`jefe_calidad`, `inspector`, `gerente`), su persistencia en `localStorage` bajo `erp_quality:viewer_role` y el re-render del dashboard al cambiar, sin habilitar ni restringir otras acciones (FR-028).
 
 **Checkpoint**: El dashboard refleja fielmente los registros del módulo.
 
@@ -179,11 +188,80 @@
 - [x] T047 [US6] Implementar en `src/components/inspection-history.js` los filtros por lote (documento origen) y rango de fechas, incluyendo la validación de rango inválido (desde posterior a hasta).
 - [x] T048 [US6] Agregar en `src/components/inspection-history.js` la acción visible de limpiar filtros y el estado vacío de la vista.
 
-**Checkpoint**: Las seis historias de usuario están funcionales e independientemente verificables.
+**Checkpoint**: Las seis historias base están funcionales e independientemente verificables.
 
 ---
 
-## Fase 9: Polish y preocupaciones transversales
+## Fase 9: User Story 7 - Exportar reportes de calidad para auditoría (Priority: P7)
+
+**Goal**: Permitir exportar el historial filtrado de inspecciones y el resumen de indicadores del dashboard, respetando los filtros activos.
+
+**Independent Test**: Aplicar filtros de lote y fechas, exportar y verificar que el archivo contiene solo los registros coincidentes; probar filtros inválidos y ausencia de datos.
+
+**Datos**: `quality_inspections`, `quality_inspection_results`, `non_conformances`, `corrective_actions`
+
+### Pruebas para User Story 7
+
+- [ ] T065 [P] [US7] Escribir pruebas de integración de exportación del historial filtrado (incluida la columna `resultados`) y del resumen de KPIs, incluyendo filtros inválidos y ausencia de datos, en `tests/integration/quality-export.test.js` (FR-041, FR-042, SC-012).
+
+### Implementación para User Story 7
+
+- [ ] T066 [US7] Implementar en `src/components/inspection-history.js` la exportación CSV UTF-8 del historial filtrado con lote, producto, plan, etapa, fecha, inspector, dictamen, estado y una columna `resultados` (`criterio:medido:cumple` separado por `;`), respetando los filtros activos y bloqueando rangos de fechas inválidos (FR-041).
+- [ ] T067 [US7] Implementar en `src/components/dashboard.js` la exportación CSV del resumen de KPIs (tasa por etapa, no conformidades abiertas por severidad, CAPA vencidas, eficacia CAPA e inspecciones pendientes) e informar cuando no haya datos (FR-042).
+- [ ] T068 [US7] Implementar en `src/components/quality-utils.js` el generador de nombre de archivo y descarga CSV reutilizable (módulo, fecha de generación y filtros aplicados) para historial y dashboard (FR-041, FR-042).
+
+**Checkpoint**: US7 queda exportable y verificable de forma independiente.
+
+---
+
+## Fase 10: User Story 8 - Adjuntar evidencia a inspecciones y no conformidades (Priority: P8)
+
+**Goal**: Permitir adjuntar, listar, descargar y eliminar evidencia asociada a inspecciones y no conformidades, con validación de tipo y tamaño.
+
+**Independent Test**: Adjuntar un archivo permitido a una inspección y a su no conformidad, verificar que queda listado y descargable, y comprobar el rechazo de archivos inválidos y las cascadas.
+
+**Datos**: `quality_inspections`, `non_conformances`, `quality_evidence`
+
+### Pruebas para User Story 8
+
+- [ ] T069 [P] [US8] Escribir pruebas de integración de adjuntar, listar, descargar y eliminar evidencia en inspecciones y no conformidades, incluyendo tipo/tamaño inválido, límite acumulado/cuota y cascadas, en `tests/integration/quality-evidence.test.js` (FR-043, FR-044, SC-013, SC-015).
+
+### Implementación para User Story 8
+
+- [ ] T070 [US8] Extender `src/storage.js` con la colección `quality_evidence` (nombre, tipo, tamaño, contenido data URL base64, autor, fecha y vínculo polimórfico a inspección o no conformidad), sus operaciones CRUD, la validación de MIME PNG/JPG/PDF, 5 MB por archivo, 8 MB acumulados y manejo de cuota, y la validación del vínculo (FR-043, FR-044, SC-015).
+- [ ] T071 [US8] Implementar en `src/components/inspection-engine.js` la carga de evidencia en inspecciones `draft`/`completed` con validación de MIME PNG/JPG/PDF, 5 MB por archivo, 8 MB acumulados, cuota y autor (FR-043).
+- [ ] T072 [US8] Implementar en `src/components/non-conformance-capa.js` la carga, autor y visualización de evidencia en no conformidades con los mismos límites y validaciones (FR-043).
+- [ ] T073 [US8] Implementar en `src/storage.js` las reglas de cascada y bloqueo de evidencia al eliminar inspecciones o no conformidades, y en `src/components/inspection-history.js` el listado y descarga de la evidencia vinculada (FR-044, FR-026).
+- [ ] T074 [US8] Agregar en `src/components/inspection-engine.js` y `src/components/non-conformance-capa.js` los estados vacíos y mensajes de validación de evidencia.
+
+**Checkpoint**: La evidencia queda trazable, validada y disponible para auditoría.
+
+---
+
+## Fase 11: User Story 9 - Configurar alertas y umbrales de calidad (Priority: P9)
+
+**Goal**: Permitir configurar reglas de alerta sobre los indicadores del dashboard y mostrar las alertas cuyo umbral se incumple.
+
+**Independent Test**: Configurar umbrales de tasa de aprobación y CAPA vencidas, cargar datos que los incumplan y verificar que el dashboard muestra las alertas; probar umbrales inválidos y reglas duplicadas.
+
+**Datos**: `quality_inspections`, `non_conformances`, `corrective_actions`, `quality_alert_rules`
+
+### Pruebas para User Story 9
+
+- [ ] T075 [P] [US9] Escribir pruebas de integración de configuración de reglas de alerta, validación de catálogo/rango, rechazo de duplicados, activación/desactivación/eliminación y visualización de alertas en el dashboard, en `tests/integration/quality-alerts.test.js` (FR-045, FR-046, FR-047, SC-014).
+
+### Implementación para User Story 9
+
+- [ ] T076 [US9] Extender `src/storage.js` con la colección `quality_alert_rules` (indicador, operador, umbral, severidad y estado activo) y la validación de catálogos, rango por indicador (0–100 en tasas, ≥ 0 en conteos) y duplicados activos por indicador y operador (FR-045).
+- [ ] T077 [US9] Implementar en `src/components/dashboard.js` el formulario de configuración de reglas de alerta, con mensajes de validación visibles y acciones de activar, desactivar y eliminar (FR-045, FR-047).
+- [ ] T078 [US9] Implementar en `src/components/dashboard.js` la evaluación de reglas activas contra los KPIs y la visualización de alertas con indicador, valor actual, umbral y severidad, excluyendo reglas desactivadas o eliminadas (FR-046, FR-047).
+- [ ] T079 [US9] Persistir las reglas de alerta (activas e inactivas) entre sesiones y recalcular las alertas al abrir o actualizar el dashboard (FR-046, FR-047).
+
+**Checkpoint**: Las alertas reflejan los umbrales configurados y los datos almacenados.
+
+---
+
+## Fase 12: Polish y preocupaciones transversales
 
 **Propósito**: Mejoras que afectan a múltiples historias y cierre del módulo.
 
@@ -194,6 +272,9 @@
 - [x] T053 Ejecutar `npm test`, los comandos de lint/formato/análisis estático definidos en `package.json` y `npm run build`; corregir cualquier error bloqueante.
 - [ ] T054 Ejecutar la validación funcional de `specs/002-quality-control-module/quickstart.md` con `npm run dev`.
 - [ ] T055 Ejecutar `/speckit.analyze` sobre `specs/002-quality-control-module/spec.md` y confirmar que no quedan hallazgos críticos ni altos.
+- [x] T080 [P] Actualizar `data-model.md`, `contracts/quality-storage.md`, `quickstart.md` y `plan.md` con las entidades `quality_evidence` y `quality_alert_rules`, las vistas de exportación/evidencia/alertas y sus KPIs asociados.
+- [ ] T081 [P] Ampliar `README.md` con exportación CSV (columna `resultados`), tipos y límites de evidencia (PNG/JPG/PDF, 5 MB por archivo, 8 MB acumulados y cuota) y configuración, desactivación y eliminación de reglas de alerta.
+- [ ] T082 Validar el rendimiento de exportación con hasta 500 inspecciones en menos de 2 segundos, según SC-012 y `quickstart.md`.
 
 ---
 
@@ -203,8 +284,8 @@
 
 - **Setup (Fase 1)**: Sin dependencias; puede iniciar de inmediato. T001 bloquea todo el desarrollo.
 - **Foundational (Fase 2)**: Depende de Setup. T005–T008 bloquean todas las historias de usuario.
-- **Historias de Usuario (Fases 3–8)**: Dependen de Foundational.
-- **Polish (Fase 9)**: Depende de que las historias deseadas estén completas.
+- **Historias de Usuario (Fases 3–11)**: Dependen de Foundational.
+- **Polish (Fase 12)**: Depende de que las historias deseadas estén completas.
 
 ### Dependencias entre historias
 
@@ -214,6 +295,10 @@
 - **US4 (P4)**: Depende de US2 y US3 (inspecciones `conditional`, no conformidades y CAPA).
 - **US5 (P5)**: Depende de US2, US3 y US4 para tener datos que agregar.
 - **US6 (P6)**: Depende de US2–US4 para mostrar historial con trazabilidad completa.
+- **US7 (P7)**: Depende de US2 y US6 para exportar inspecciones, resultados e historial filtrado.
+- **US8 (P8)**: Depende de US2 y US3 para adjuntar evidencia a inspecciones y no conformidades.
+- **US9 (P9)**: Depende de US5 para evaluar reglas de alerta contra los KPIs del dashboard.
+- **Cobertura adicional (T056–T064)**: cierran brechas detectadas en el análisis dentro de su historia (US2: FR-033/FR-036/FR-040; US3: FR-038; US4: FR-034; US5: FR-028); cada tarea de prueba precede a su implementación.
 
 ### Dentro de cada historia
 
@@ -229,6 +314,9 @@
 - Las pruebas [P] de cada historia pueden escribirse en paralelo con otras tareas de prueba.
 - US5 y US6 pueden abordarse en paralelo por desarrolladores distintos una vez que US2–US4 generen datos.
 - T049 y T050 pueden ejecutarse en paralelo al cierre.
+- T056, T060, T062 y T063 pueden escribirse en paralelo (archivos de prueba distintos) antes de sus tareas de implementación asociadas.
+- T065, T069 y T075 pueden escribirse en paralelo (archivos de prueba distintos).
+- US7, US8 y US9 pueden abordarse en paralelo una vez que US2–US6 generen datos y KPIs; T080 y T081 pueden ejecutarse en paralelo al cierre.
 
 ---
 
@@ -273,7 +361,10 @@ Task: "Implementar tabla y filtros del historial en src/components/inspection-hi
 5. Agregar US4 → probar → revisión y cuarentena.
 6. Agregar US5 → probar → dashboard gerencial.
 7. Agregar US6 → probar → auditoría e historial.
-8. Polish y validación final.
+8. Agregar US7 → probar → exportación CSV.
+9. Agregar US8 → probar → evidencia adjunta.
+10. Agregar US9 → probar → alertas de umbral.
+11. Polish y validación final.
 
 ### Estrategia con equipo paralelo
 
