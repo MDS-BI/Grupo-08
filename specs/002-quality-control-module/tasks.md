@@ -295,3 +295,15 @@ Task: "Implementar tabla y filtros del historial en src/components/inspection-hi
 - No editar ni eliminar planes/criterios con inspecciones históricas; duplicar para versionar.
 - Evitar tareas vagas, conflictos de archivo y dependencias cruzadas que rompan la independencia.
 - Los documentos de la raíz (`plan.md`, `data-model.md`) son históricos; la fuente de verdad es `specs/002-quality-control-module/`.
+
+---
+
+## Registro de Modificaciones (Feedback)
+
+Correcciones derivadas del feedback Avance 03 (16/11/26), arreglos A1–A4 y A8 del Equipo A. El estado se verificó contra el código y las pruebas presentes en `src/` y `tests/`.
+
+- [ ] T056 [A1] Configurar los scripts de lint, formato y análisis estático en `package.json` para que T053 sea ejecutable (T003 continúa sin marcar en `package.json`).
+- [ ] T057 [A2] Crear `tests/setup/setup.js` y registrarlo en `vitest.config.mjs` para completar el entorno de pruebas (T004 continúa sin marcar y el archivo no existe en `tests/`).
+- [ ] T058 [A3] Implementar el flujo de rechazo manual con confirmación y motivo obligatorio en `src/components/non-conformance-capa.js`, con su escenario en `tests/integration/review-quarantine.test.js`; actualmente solo existe el cambio de dictamen con `override_justification`.
+- [x] T059 [A4] Mantener y probar el filtro "Módulo origen" en el historial: `currentFilters`, `filterInspections` y `clearHistoryFilters` en `src/components/inspection-history.js`, cubierto por `tests/integration/inspection-history.test.js`.
+- [x] T060 [A8] Mejoras funcionales y de interfaz solicitadas: datos simulados en `src/seed-data.js`, estilos, transiciones y navegación en `src/styles.css`, `src/app.js` y `src/components/shell.js`, con cobertura en `tests/integration/workspace-shell.test.js`, `tests/integration/relabeling.test.js` y `tests/integration/search-entities.test.js`.
