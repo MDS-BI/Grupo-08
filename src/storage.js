@@ -327,6 +327,20 @@ export const NON_CONFORMANCE_STATUSES = Object.freeze(['open', 'under_review', '
 export const CORRECTIVE_ACTION_STATUSES = Object.freeze(['pending', 'in_progress', 'completed']);
 export const ACTION_TYPES = Object.freeze(['resampling', 'rework', 'other']);
 export const REFERENCE_MODULES = Object.freeze(['goods_receipt', 'production_order', 'shipment']);
+export const EVIDENCE_ENTITY_TYPES = Object.freeze(['inspection', 'non_conformance']);
+export const EVIDENCE_MIME_TYPES = Object.freeze(['image/png', 'image/jpeg', 'application/pdf']);
+export const EVIDENCE_MAX_FILE_BYTES = 5 * 1024 * 1024;
+export const EVIDENCE_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
+export const ALERT_METRICS = Object.freeze([
+  'approval_rate',
+  'open_non_conformances',
+  'overdue_capa',
+  'capa_effectiveness',
+  'pending_inspections'
+]);
+export const ALERT_OPERATORS = Object.freeze(['lt', 'lte', 'gt', 'gte', 'eq']);
+export const ALERT_SEVERITIES = Object.freeze(['info', 'warning', 'critical']);
+const ALERT_RATE_METRICS = Object.freeze(['approval_rate', 'capa_effectiveness']);
 
 const QUALITY_COLLECTION_KEYS = Object.freeze({
   quality_inspection_plans: 'erp_quality:quality_inspection_plans',
@@ -334,7 +348,9 @@ const QUALITY_COLLECTION_KEYS = Object.freeze({
   quality_inspections: 'erp_quality:quality_inspections',
   quality_inspection_results: 'erp_quality:quality_inspection_results',
   non_conformances: 'erp_quality:non_conformances',
-  corrective_actions: 'erp_quality:corrective_actions'
+  corrective_actions: 'erp_quality:corrective_actions',
+  quality_evidence: 'erp_quality:quality_evidence',
+  quality_alert_rules: 'erp_quality:quality_alert_rules'
 });
 
 const EXTERNAL_COLLECTION_KEYS = Object.freeze({
@@ -415,6 +431,253 @@ export function deleteRelated(name, foreignKey, id){
   const next = list.filter(r => r[foreignKey] !== id);
   saveCollection(name, next);
   return next;
+}
+
+function isQuotaError(error){
+  return Boolean(error) && (
+    error.name === 'QuotaExceededError'
+    || error.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    || /quota/i.test(String(error.message || ''))
+  );
+}
+
+export function evidenceFor(entityType, entityId){
+  return loadCollection('quality_evidence').filter(record =>
+    record.entity_type === entityType && record.entity_id === entityId
+  );
+}
+
+export function evidenceTotalBytes(records){
+  const list = Array.isArray(records) ? records : loadCollection('quality_evidence');
+  return list.reduce((total, record) => total + (Number(record.size_bytes) || 0), 0);
+}
+
+function evidenceEntityExists(entityType, entityId){
+  if(entityType === 'inspection'){
+    return loadCollection('quality_inspections').some(i => i.inspection_id === entityId);
+  }
+  if(entityType === 'non_conformance'){
+    return loadCollection('non_conformances').some(nc => nc.non_conformance_id === entityId);
+  }
+  return false;
+}
+
+export function validateEvidence(payload, options = {}){
+  const errors = {};
+  const entityType = payload && payload.entity_type;
+  const entityId = payload && payload.entity_id;
+  if(!EVIDENCE_ENTITY_TYPES.includes(entityType)){
+    errors.entity_type = 'El tipo de vínculo debe ser inspection o non_conformance';
+  }
+  if(isBlank(entityId)){
+    errors.entity_id = 'El registro vinculado es obligatorio';
+  } else if(errors.entity_type === undefined && !evidenceEntityExists(entityType, entityId)){
+    errors.entity_id = 'El registro vinculado no existe';
+  }
+  if(isBlank(payload && payload.file_name)){
+    errors.file_name = 'El nombre del archivo es obligatorio';
+  }
+  if(!EVIDENCE_MIME_TYPES.includes(payload && payload.mime_type)){
+    errors.mime_type = 'El archivo debe ser PNG, JPG o PDF';
+  }
+  const size = Number(payload && payload.size_bytes);
+  if(!Number.isFinite(size) || size <= 0){
+    errors.size_bytes = 'El tamaño del archivo debe ser mayor que cero';
+  } else if(size > EVIDENCE_MAX_FILE_BYTES){
+    errors.size_bytes = 'El archivo supera el límite de 5 MB';
+  }
+  const dataUrl = payload && payload.data_url;
+  if(typeof dataUrl !== 'string' || !dataUrl.startsWith('data:') || !dataUrl.includes(';base64,')){
+    errors.data_url = 'El contenido del archivo no es válido';
+  } else if(payload && payload.mime_type && !dataUrl.startsWith(`data:${payload.mime_type};base64,`)){
+    errors.data_url = 'El contenido no coincide con el tipo de archivo';
+  }
+  if(isBlank(payload && payload.uploaded_by)){
+    errors.uploaded_by = 'El autor es obligatorio';
+  } else if(!loadExternal('employees').some(e => e.employee_id === payload.uploaded_by)){
+    errors.uploaded_by = 'El autor seleccionado no existe';
+  }
+  const list = loadCollection('quality_evidence');
+  const previous = list
+    .filter(record => !options.ignoreId || record.id !== options.ignoreId)
+    .reduce((total, record) => total + (Number(record.size_bytes) || 0), 0);
+  if(!errors.size_bytes && previous + size > EVIDENCE_MAX_TOTAL_BYTES){
+    errors.size_bytes = 'La evidencia supera el límite acumulado de 8 MB';
+  }
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
+export function addEvidence(payload){
+  const check = validateEvidence(payload);
+  if(!check.valid) throw new Error(Object.values(check.errors)[0]);
+  const now = new Date().toISOString();
+  const record = {
+    id: generateId(),
+    evidence_id: generateId(),
+    entity_type: payload.entity_type,
+    entity_id: payload.entity_id,
+    file_name: String(payload.file_name).trim(),
+    mime_type: payload.mime_type,
+    size_bytes: Number(payload.size_bytes),
+    data_url: payload.data_url,
+    uploaded_by: payload.uploaded_by,
+    uploaded_at: now,
+    createdAt: now,
+    updatedAt: now
+  };
+  const list = loadCollection('quality_evidence');
+  list.push(record);
+  try{
+    saveCollection('quality_evidence', list);
+  }catch(error){
+    if(isQuotaError(error)){
+      throw new Error('No hay espacio suficiente para guardar la evidencia. La evidencia anterior se conserva.');
+    }
+    throw error;
+  }
+  return record;
+}
+
+export function deleteEvidence(id){
+  const list = loadCollection('quality_evidence');
+  const record = list.find(item => item.id === id || item.evidence_id === id);
+  if(!record) throw new Error('Evidencia no encontrada');
+  saveCollection('quality_evidence', list.filter(item => item.id !== record.id));
+  return true;
+}
+
+export function deleteEvidenceFor(entityType, entityId){
+  const list = loadCollection('quality_evidence');
+  const next = list.filter(record =>
+    record.entity_type !== entityType || record.entity_id !== entityId
+  );
+  if(next.length !== list.length) saveCollection('quality_evidence', next);
+  return next;
+}
+
+function isActiveAlertRule(rule){
+  return Boolean(rule) && rule.is_active !== false;
+}
+
+export function validateAlertRule(rule, options = {}){
+  const errors = {};
+  const metric = rule && rule.metric;
+  const operator = rule && rule.operator;
+  if(!ALERT_METRICS.includes(metric)){
+    errors.metric = 'El indicador de alerta no es válido';
+  }
+  if(!ALERT_OPERATORS.includes(operator)){
+    errors.operator = 'El operador de alerta no es válido';
+  }
+  if(rule && (isBlank(rule.threshold) || !Number.isFinite(Number(rule.threshold)))){
+    errors.threshold = 'El umbral debe ser numérico';
+  } else if(!errors.metric){
+    const threshold = Number(rule.threshold);
+    if(ALERT_RATE_METRICS.includes(metric) && (threshold < 0 || threshold > 100)){
+      errors.threshold = 'El umbral debe estar entre 0 y 100 para este indicador';
+    } else if(!ALERT_RATE_METRICS.includes(metric) && threshold < 0){
+      errors.threshold = 'El umbral debe ser mayor o igual que cero';
+    }
+  }
+  if(!ALERT_SEVERITIES.includes(rule && rule.severity)){
+    errors.severity = 'La severidad debe ser info, warning o critical';
+  }
+  if(!errors.metric && !errors.operator && isActiveAlertRule(rule)){
+    const duplicate = loadCollection('quality_alert_rules').find(item =>
+      isActiveAlertRule(item)
+      && item.metric === metric
+      && item.operator === operator
+      && item.id !== options.ignoreId
+      && item.alert_rule_id !== options.ignoreId
+    );
+    if(duplicate) errors.operator = 'Ya existe una regla activa para este indicador y operador';
+  }
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
+export function addAlertRule(payload){
+  const candidate = {
+    metric: payload.metric,
+    operator: payload.operator,
+    threshold: payload.threshold,
+    severity: payload.severity,
+    is_active: payload.is_active !== false
+  };
+  const check = validateAlertRule(candidate);
+  if(!check.valid) throw new Error(Object.values(check.errors)[0]);
+  const now = new Date().toISOString();
+  const rule = {
+    id: generateId(),
+    alert_rule_id: generateId(),
+    metric: candidate.metric,
+    operator: candidate.operator,
+    threshold: Number(candidate.threshold),
+    severity: candidate.severity,
+    is_active: candidate.is_active,
+    createdAt: now,
+    updatedAt: now
+  };
+  const list = loadCollection('quality_alert_rules');
+  list.push(rule);
+  saveCollection('quality_alert_rules', list);
+  return rule;
+}
+
+export function updateAlertRule(id, updates){
+  const list = loadCollection('quality_alert_rules');
+  const idx = list.findIndex(rule => rule.id === id || rule.alert_rule_id === id);
+  if(idx === -1) throw new Error('Regla de alerta no encontrada');
+  const current = list[idx];
+  const merged = {
+    metric: updates.metric !== undefined ? updates.metric : current.metric,
+    operator: updates.operator !== undefined ? updates.operator : current.operator,
+    threshold: updates.threshold !== undefined ? updates.threshold : current.threshold,
+    severity: updates.severity !== undefined ? updates.severity : current.severity,
+    is_active: updates.is_active !== undefined ? Boolean(updates.is_active) : current.is_active
+  };
+  const check = validateAlertRule(merged, { ignoreId: current.id });
+  if(!check.valid) throw new Error(Object.values(check.errors)[0]);
+  list[idx] = {
+    ...current,
+    metric: merged.metric,
+    operator: merged.operator,
+    threshold: Number(merged.threshold),
+    severity: merged.severity,
+    is_active: merged.is_active,
+    updatedAt: new Date().toISOString()
+  };
+  saveCollection('quality_alert_rules', list);
+  return list[idx];
+}
+
+export function deleteAlertRule(id){
+  const list = loadCollection('quality_alert_rules');
+  const rule = list.find(item => item.id === id || item.alert_rule_id === id);
+  if(!rule) throw new Error('Regla de alerta no encontrada');
+  saveCollection('quality_alert_rules', list.filter(item => item.id !== rule.id));
+  return true;
+}
+
+function compareAlertValue(value, operator, threshold){
+  if(operator === 'lt') return value < threshold;
+  if(operator === 'lte') return value <= threshold;
+  if(operator === 'gt') return value > threshold;
+  if(operator === 'gte') return value >= threshold;
+  if(operator === 'eq') return value === threshold;
+  return false;
+}
+
+export function deriveAlerts(kpis, alertRules){
+  const values = kpis || {};
+  const rules = Array.isArray(alertRules) ? alertRules : loadCollection('quality_alert_rules');
+  return rules.reduce((alerts, rule) => {
+    if(!isActiveAlertRule(rule)) return alerts;
+    const current = Number(values[rule.metric]);
+    if(!Number.isFinite(current)) return alerts;
+    if(!compareAlertValue(current, rule.operator, Number(rule.threshold))) return alerts;
+    alerts.push({ ...rule, value: current });
+    return alerts;
+  }, []);
 }
 
 export function loadExternal(name){
@@ -778,6 +1041,7 @@ export function deleteInspection(id){
   if(hasNc) throw new Error('La inspección tiene una no conformidad asociada y no puede eliminarse');
   saveCollection('quality_inspections', list.filter(i => i.id !== inspection.id));
   deleteRelated('quality_inspection_results', 'inspection_id', inspection.inspection_id);
+  deleteEvidenceFor('inspection', inspection.inspection_id);
   return true;
 }
 
@@ -876,6 +1140,7 @@ export function deleteNonConformance(id){
   if(!nc) throw new Error('No conformidad no encontrada');
   saveCollection('non_conformances', list.filter(n => n.id !== nc.id));
   deleteRelated('corrective_actions', 'non_conformance_id', nc.non_conformance_id);
+  deleteEvidenceFor('non_conformance', nc.non_conformance_id);
   return true;
 }
 

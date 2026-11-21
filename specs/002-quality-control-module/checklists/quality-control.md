@@ -2,6 +2,7 @@
 
 **Purpose**: Validate the completeness, clarity, consistency, measurability, and coverage of the Control de Calidad requirements before implementation.
 **Created**: 2026-11-01
+**Updated**: 2026-11-17
 **Feature**: [spec.md](../spec.md)
 **Scope**: Requirements quality only; this checklist does not verify implementation behavior.
 **Depth**: Standard
@@ -31,20 +32,20 @@
 - [x] CHK014 Do inspection state and dictamen requirements align across spec, plan, and tasks? [Consistency, Spec §FR-005, §FR-012, Plan §6, Tasks T052] — Sí: `draft/completed` y `passed/failed/conditional`/`null` coherentes en spec, plan §6, data-model/contratos y tareas/flujo implementado.
 - [x] CHK015 Do non-conformity statuses and quarantine conditions align without overlap or contradiction? [Consistency, Spec §FR-016, §FR-031, Data Model §3.5] — Sí: cuarentena derivada de NC `open`/`under_review` y salida en `closed`; sin entidad de cuarentena separada (FR-016/031/035).
 - [x] CHK016 Do role-based visibility requirements align across functional requirements and assumptions? [Consistency, Spec §FR-028, §Assumptions] — Sí: selector de rol persistido, métricas agregadas para todos y detalle por inspector solo `jefe_calidad` (FR-028, §Assumptions, dashboard).
-- [x] CHK017 Are story priorities coherent with the stated dependencies and delivery phases? [Consistency, Spec §US1–§US6, Plan §11] — Sí: P1→P6 sigue dependencias funcionales y fases/orden de tareas (plan §11, tasks dependencias US1–US6).
+- [x] CHK017 Are story priorities coherent with the stated dependencies and delivery phases? [Consistency, Spec §US1–§US9, Plan §11] — Sí: P1→P9 sigue dependencias funcionales y fases/orden de tareas (plan §11, tasks dependencias US1–US9).
 - [x] CHK018 Do performance targets align between success criteria, plan acceptance criteria, and validation tasks? [Consistency, Spec §SC-006, §SC-010, Plan §12, Tasks T092] — Sí: <1s percibido en búsqueda filtrada y <2s con hasta 500 inspecciones para consultas/dashboard (SC-006/010, plan §12, quickstart/T051). Nota: task ID de validación referenciado varía en el checklist original (“T092”), pero el criterio de rendimiento está especificado y mapeado (p.ej. T051).
 
 ## Acceptance Criteria Quality
 
-- [x] CHK019 Are all success criteria expressed with measurable thresholds or percentages? [Measurability, Spec §SC-001–§SC-011] — Sí: SC-001–SC-011 usan tiempos, porcentajes (100%/0%/90%) o condiciones cuantificables.
+- [x] CHK019 Are all success criteria expressed with measurable thresholds or percentages? [Measurability, Spec §SC-001–§SC-015] — Sí: SC-001–SC-015 usan tiempos, porcentajes (100%/0%/90%) o condiciones cuantificables.
 - [x] CHK020 Is the denominator and time window for the approval-rate indicator explicitly defined? [Measurability, Spec §FR-020, Plan §9] — Sí: tasa = inspecciones `passed` / total de inspecciones `completed` (FR-039, plan §9), por etapa; `conditional` cuenta en denominador, no en numerador.
 - [x] CHK021 Is the CAPA-effectiveness formula explicit enough to be computed consistently? [Measurability, Spec §FR-020, Plan §9] — Sí: porcentaje de acciones `completed` dentro de `due_date` (FR-020, plan §9, dashboard).
-- [x] CHK022 Are empty-state requirements objectively testable for dashboard, pending lots, quarantine, history, and conditional review? [Measurability, Spec §FR-024, Tasks T084] — Sí: FR-024 exige estados vacíos claros en dashboard, lotes pendientes, cuarentena, historial y revisión condicional (reflejado en componentes). Nota: referencia de tarea original (“T084”) difiere de numeración actual, pero el requisito es medible.
+- [x] CHK022 Are empty-state requirements objectively testable for dashboard, pending lots, quarantine, history, conditional review, export, evidence, and alerts? [Measurability, Spec §FR-024, Tasks T074/T077] — Sí: FR-024 exige estados vacíos claros en dashboard, lotes pendientes, cuarentena, historial, revisión condicional, exportación, evidencia y alertas (reflejado en componentes). Nota: referencia de tarea original (“T084”) difiere de numeración actual, pero el requisito es medible.
 - [x] CHK023 Is the 500-inspection performance condition paired with a concrete response threshold? [Measurability, Spec §SC-010, Plan §12] — Sí: consultas y dashboard <2s con hasta 500 inspecciones (SC-010, plan §12).
 
 ## Scenario Coverage
 
-- [x] CHK024 Are primary flows defined for every role named in the specification? [Coverage, Spec §US1–§US6, Plan §3] — Sí: Inspector (US2), Jefe de Calidad (US1/3/4), Gerente/Auditor (US5/6) con acciones y escenarios por rol.
+- [x] CHK024 Are primary flows defined for every role named in the specification? [Coverage, Spec §US1–§US9, Plan §3] — Sí: Inspector (US2/US8), Jefe de Calidad (US1/3/4/9) y Gerente (US5/6/7) con acciones y escenarios por rol.
 - [x] CHK025 Are alternate flows defined for `conditional` review, manual override, and manual rejection? [Coverage, Spec §US4] — Sí: bandeja `conditional`, cambio de dictamen con justificación/bloqueos y rechazo manual con confirmación/motivo (US4, tasks/contratos/vistas).
 - [x] CHK026 Are exception and recovery flows defined for invalid sources, missing measurements, rejected saves, and invalid date ranges? [Coverage, Spec §Edge Cases, §US2 Scenario 7, §US6] — Sí: origen inválido/huérfano, mediciones faltantes/no numéricas, validaciones de guardado y rango de fechas inválido (edge cases, US2.7–9, US6.5).
 - [x] CHK027 Are non-functional requirements covered for persistence, performance, accessibility, and role-restricted visibility? [Coverage, Spec §SC-005, §SC-010, §FR-027, §FR-028] — Sí: persistencia local (FR-027/SC-005), rendimiento (SC-006/010), visibilidad por rol (FR-028) y accesibilidad prevista en plan/tareas de cierre (T050) como preocupación de UX.
@@ -72,7 +73,7 @@
 
 ## Traceability
 
-- [x] CHK040 Does every functional and non-functional requirement have at least one acceptance scenario or validation task mapped to it? [Traceability, Spec §FR-001–§FR-032, §SC-001–§SC-011, Tasks] — Sí: FR/SC mapeados a US1–US6, escenarios de aceptación y tareas/pruebas por flujo (spec, plan §12, tasks). Requisitos añadidos FR-033–FR-040 en spec también tienen cobertura en historias/escenarios y artefactos de tareas/componentes.
+- [x] CHK040 Does every functional and non-functional requirement have at least one acceptance scenario or validation task mapped to it? [Traceability, Spec §FR-001–§FR-047, §SC-001–§SC-015, Tasks] — Sí: FR/SC mapeados a US1–US9, escenarios de aceptación y tareas/pruebas por flujo (spec, plan §12, tasks); FR-041–FR-047/SC-012–SC-015 tienen cobertura en US7–US9 y T065–T079.
 
 ## Notes
 

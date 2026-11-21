@@ -6,6 +6,8 @@
 
 **Status**: Draft
 
+**Updated**: 2026-11-17 — se añadieron las historias US7–US9 (exportación, evidencia y alertas) y se resolvieron las decisiones de contenido/límites de evidencia, alcance del CSV, catálogos y rangos de alertas, y desactivación/eliminación de reglas.
+
 **Input**: User description: "Añadir la especificación del módulo de Control de Calidad a `specs/002-quality-control-module`, a partir de `plan.md`, `data-model.md`, `Historias-Usuarios.md` y el feedback del proyecto."
 
 ## Clarifications
@@ -38,6 +40,14 @@
 - Q: ¿El estado `conditional` se contabiliza dentro del cálculo de la tasa de aprobación (KPI)? → A: Sí. Cuenta en el denominador (todas las inspecciones `completed`) pero no en el numerador (solo `passed`), por lo que se considera no aprobada y reduce la tasa.
 - Q: ¿Cómo se selecciona o cambia el rol de usuario activo (selector del dashboard)? → A: Con el selector "Rol de uso" (`jefe_calidad`, `inspector`, `gerente`), cuyo valor se persiste en `localStorage` (`erp_quality:viewer_role`) y vuelve a renderizar el dashboard al cambiar; el rol solo restringe el detalle individual por inspector, exclusivo de `jefe_calidad`.
 - Q: ¿Cómo funciona la navegación hacia Control de Calidad desde el módulo base del ERP (001)? → A: Mediante el grupo "Control de Calidad" de la barra lateral, que alterna la vista de calidad seleccionada y oculta las vistas del módulo base; la acción "Inspeccionar" de lotes pendientes abre la vista de inspecciones con el documento origen preseleccionado.
+
+### Session 2026-11-17
+
+- Q: ¿La evidencia adjunta debe guardar el contenido del archivo para permitir su descarga? → A: Sí, como data URL base64 en `localStorage`, con un límite acumulado de 8 MB y manejo de `QuotaExceededError` sin perder la evidencia ya almacenada.
+- Q: ¿Qué tipos y tamaño máximo acepta la evidencia? → A: Solo PNG, JPG/JPEG y PDF, con un máximo de 5 MB por archivo; se rechaza cualquier otro tipo o tamaño.
+- Q: ¿Qué catálogo y rangos deben validarse en las reglas de alerta? → A: Indicadores `approval_rate` (0–100), `open_non_conformances` (≥ 0), `overdue_capa` (≥ 0), `capa_effectiveness` (0–100) y `pending_inspections` (≥ 0); operadores `lt`, `lte`, `gt`, `gte`, `eq`; severidad `info`, `warning`, `critical`.
+- Q: ¿El CSV del historial debe incluir los resultados por criterio? → A: Sí, una fila por inspección con las columnas de inspección y una columna `resultados` que resuma cada criterio como `criterio:medido:cumple` separado por `;`.
+- Q: ¿Se pueden desactivar o eliminar las reglas de alerta? → A: Sí; al desactivarlas (`is_active = false`) o eliminarlas, su alerta deja de mostrarse y la regla se conserva o se retira del almacenamiento según la acción.
 
 ## Problema y Solución
 
@@ -160,7 +170,7 @@ Datos: `quality_inspections`, `non_conformances`, `corrective_actions`
 
 ### User Story 6 - Auditar el historial de inspecciones (Priority: P6)
 
-Como Auditor o Gerente de Operaciones, quiero filtrar el historial de inspecciones por lote (documento origen) y rango de fechas, para encontrar evaluaciones pasadas y verificar el cumplimiento normativo.
+Como Gerente de Operaciones, quiero filtrar el historial de inspecciones por lote (documento origen) y rango de fechas, para encontrar evaluaciones pasadas y verificar el cumplimiento normativo.
 
 **Why this priority**: Facilita auditoría y consulta, pero no bloquea el flujo operativo del MVP.
 
@@ -175,6 +185,68 @@ Datos: `quality_inspections`, `quality_inspection_results`
 3. **Given** filtros aplicados, **When** se usa la acción de limpiar filtros, **Then** la tabla vuelve a mostrar todos los registros.
 4. **Given** un historial sin datos o sin coincidencias, **When** se abre la vista, **Then** se muestra un estado vacío claro con una acción para limpiar filtros.
 5. **Given** un rango de fechas inválido (desde posterior a hasta), **When** se intenta aplicar, **Then** el sistema informa el error y no aplica el filtro.
+
+---
+
+### User Story 7 - Exportar reportes de calidad para auditoría (Priority: P7)
+
+Como Jefe de Calidad o Gerente de Operaciones, quiero exportar el historial de inspecciones y los indicadores del dashboard respetando los filtros activos, para compartir evidencia y realizar análisis externos sin depender del sistema.
+
+**Why this priority**: Facilita auditorías y respaldo documental sobre datos ya generados; no bloquea el flujo operativo del MVP.
+
+**Independent Test**: Aplicar filtros en el historial, exportar y verificar que el archivo contiene únicamente los registros coincidentes con las columnas esperadas.
+
+Datos: `quality_inspections`, `quality_inspection_results`, `non_conformances`, `corrective_actions`
+
+**Acceptance Scenarios**:
+
+1. **Given** un historial con filtros de lote y fechas aplicados, **When** el Jefe de Calidad exporta, **Then** el archivo contiene solo las inspecciones y resultados que cumplen los filtros, con lote, producto, plan, etapa, fecha, inspector, dictamen, estado y una columna `resultados` con cada criterio medido.
+2. **Given** el dashboard con indicadores calculados, **When** el Gerente exporta el resumen, **Then** el archivo incluye tasa de aprobación por etapa, no conformidades abiertas por severidad, CAPA vencidas, eficacia CAPA e inspecciones pendientes.
+3. **Given** filtros inválidos (desde posterior a hasta), **When** se intenta exportar, **Then** el sistema bloquea la exportación y muestra el error.
+4. **Given** ausencia de registros para los filtros aplicados, **When** se intenta exportar, **Then** se informa que no hay datos y no se genera un archivo vacío.
+5. **Given** una exportación generada, **When** se descarga, **Then** el nombre del archivo incluye el módulo, la fecha de generación y los filtros aplicados.
+
+---
+
+### User Story 8 - Adjuntar evidencia a inspecciones y no conformidades (Priority: P8)
+
+Como Inspector de Calidad, quiero adjuntar imágenes o documentos de respaldo a una inspección y a una no conformidad, para conservar evidencia verificable ante auditorías y revisiones internas.
+
+**Why this priority**: Refuerza la trazabilidad y la evidencia documental; depende de que existan inspecciones y no conformidades.
+
+**Independent Test**: Adjuntar un archivo permitido a una inspección completada y a su no conformidad, y verificar que la evidencia queda listada y descargable desde el historial.
+
+Datos: `quality_inspections`, `non_conformances`, `quality_evidence`
+
+**Acceptance Scenarios**:
+
+1. **Given** una inspección en estado `draft` o `completed`, **When** el Inspector adjunta un archivo con tipo y tamaño permitidos, **Then** la evidencia queda asociada a la inspección con nombre, tipo, tamaño, autor y fecha.
+2. **Given** una no conformidad existente, **When** se adjunta un archivo válido, **Then** la evidencia queda asociada a la no conformidad y visible en su detalle.
+3. **Given** un archivo con tipo distinto de PNG/JPG/PDF, tamaño superior a 5 MB o una carga que excede 8 MB acumulados o la cuota, **When** se intenta adjuntar, **Then** el sistema rechaza la operación y explica el motivo.
+4. **Given** una inspección o no conformidad con evidencia, **When** se consulta el historial, **Then** la evidencia se lista y puede descargarse conservando su vínculo.
+5. **Given** una inspección sin no conformidad con evidencia adjunta, **When** se elimina la inspección, **Then** su evidencia se elimina en cascada; si tiene no conformidad, la eliminación se bloquea.
+6. **Given** una no conformidad con evidencia y acciones CAPA, **When** se elimina la no conformidad, **Then** se eliminan en cascada su evidencia y sus acciones CAPA.
+
+---
+
+### User Story 9 - Configurar alertas y umbrales de calidad (Priority: P9)
+
+Como Jefe de Calidad, quiero definir umbrales para los indicadores del dashboard y recibir alertas cuando se incumplen, para priorizar desviaciones antes de que afecten la operación.
+
+**Why this priority**: Mejora la reacción proactiva, pero depende de que existan inspecciones, no conformidades y CAPA registradas.
+
+**Independent Test**: Configurar umbrales de tasa de aprobación y de CAPA vencidas, cargar datos que los incumplan y verificar que el dashboard muestra las alertas correspondientes.
+
+Datos: `quality_inspections`, `non_conformances`, `corrective_actions`, `quality_alert_rules`
+
+**Acceptance Scenarios**:
+
+1. **Given** el dashboard de calidad, **When** el Jefe de Calidad crea una regla de alerta con indicador, operador, umbral y severidad, **Then** la regla se guarda y queda activa.
+2. **Given** una regla activa, **When** los datos del dashboard incumplen el umbral, **Then** se muestra una alerta con el indicador, valor actual, umbral y severidad.
+3. **Given** una regla activa, **When** los datos cumplen el umbral, **Then** no se muestra la alerta correspondiente.
+4. **Given** una regla con umbral no numérico o fuera de rango, **When** se intenta guardar, **Then** el sistema muestra un error de validación y no la persiste.
+5. **Given** reglas configuradas, **When** se recarga la aplicación, **Then** las reglas y sus alertas se recalculan y permanecen disponibles.
+6. **Given** una regla que ya no se necesita, **When** el Jefe de Calidad la desactiva o elimina, **Then** deja de mostrarse la alerta asociada.
 
 ### Edge Cases
 
@@ -198,6 +270,16 @@ Datos: `quality_inspections`, `quality_inspection_results`
 - Lote sin inspección completada: se muestra como pendiente, aunque exista una inspección en estado `draft`; al inspeccionarlo se reanuda el borrador del mismo origen y plan.
 - Origen y plan con más de una inspección `draft` por datos previos: se reanuda la más reciente y se advierte la inconsistencia sin crear otra.
 - Cambio manual del dictamen de una inspección existente a `failed`: no genera una no conformidad automática; solo completar una inspección con dictamen `failed` la genera.
+- Exportación sin registros coincidentes: se informa la ausencia de datos y no se genera un archivo vacío.
+- Exportación con filtros inválidos: se bloquea y se informa el error, igual que en la consulta del historial.
+- Evidencia con tipo distinto de PNG/JPG/PDF o tamaño superior a 5 MB: se rechaza con un mensaje que indica el motivo.
+- Evidencia que supera el límite acumulado de 8 MB o la cuota de `localStorage`: se rechaza y se conserva la evidencia ya almacenada.
+- Eliminación de una inspección o no conformidad con evidencia: se aplican las mismas reglas de cascada y bloqueo que para sus resultados y acciones CAPA.
+- Exportación del historial: incluye una columna `resultados` con `criterio:medido:cumple` por cada criterio y mantiene las columnas de la inspección.
+- Regla de alerta con umbral no numérico o fuera del rango de su indicador: se rechaza y no se persiste.
+- Segunda regla de alerta para el mismo indicador y operador: se rechaza para evitar alertas duplicadas.
+- Regla de alerta desactivada o eliminada: deja de mostrarse su alerta; si se elimina, se retira del almacenamiento.
+- Regla de alerta incumplida: la alerta es informativa y no bloquea operaciones ni genera no conformidades automáticas.
 
 ## Requirements *(mandatory)*
 
@@ -226,9 +308,9 @@ Datos: `quality_inspections`, `quality_inspection_results`
 - **FR-021**: El sistema MUST mostrar un análisis de Pareto de productos y etapas con mayor concentración de no conformidades.
 - **FR-022**: El sistema MUST permitir filtrar el historial de inspecciones por lote (documento origen) y rango de fechas.
 - **FR-023**: El sistema MUST ofrecer una acción visible para limpiar los filtros del historial.
-- **FR-024**: El sistema MUST mostrar estados vacíos claros cuando no existan registros o resultados para los filtros aplicados en dashboard, lotes pendientes, cuarentena, historial y revisión condicional.
+- **FR-024**: El sistema MUST mostrar estados vacíos claros cuando no existan registros o resultados para los filtros aplicados en dashboard, lotes pendientes, cuarentena, historial, revisión condicional, exportación, evidencia y alertas.
 - **FR-025**: El sistema MUST conservar la trazabilidad desde la inspección y sus resultados hasta el cierre de la no conformidad y sus acciones CAPA.
-- **FR-026**: El sistema MUST preservar la integridad de los datos con las siguientes reglas: planes o criterios con inspecciones históricas no se editan ni eliminan; una inspección con no conformidad no se elimina; una no conformidad con CAPA elimina sus CAPA en cascada; una inspección sin no conformidad elimina sus resultados en cascada.
+- **FR-026**: El sistema MUST preservar la integridad de los datos con las siguientes reglas: planes o criterios con inspecciones históricas no se editan ni eliminan; una inspección con no conformidad no se elimina; una no conformidad con CAPA elimina sus CAPA en cascada; una inspección sin no conformidad elimina sus resultados en cascada; la evidencia se elimina en cascada con su inspección (sin no conformidad) o con su no conformidad, y permanece cuando la eliminación de la inspección está bloqueada.
 - **FR-027**: El sistema MUST mantener disponibles los datos registrados entre sesiones de uso.
 - **FR-028**: El sistema MUST ofrecer en el dashboard de calidad un selector "Rol de uso" con los valores `jefe_calidad`, `inspector` y `gerente`, MUST persistir el valor seleccionado en `localStorage` (`erp_quality:viewer_role`) y MUST volver a renderizar el dashboard al cambiarlo. Las métricas agregadas MUST mostrarse a todos los roles y el detalle individual por inspector MUST quedar limitado al rol `jefe_calidad`; el rol seleccionado MUST NOT habilitar ni restringir otras acciones.
 - **FR-029**: El sistema MUST marcar las inspecciones con dictamen `conditional` en una bandeja de revisión del Jefe de Calidad, sin generar una no conformidad automática.
@@ -243,6 +325,13 @@ Datos: `quality_inspections`, `quality_inspection_results`
 - **FR-038**: El sistema MUST permitir fijar el estado de una acción CAPA (`pending`, `in_progress`, `completed`) desde el formulario de CAPA; al pasar a `completed` MUST registrar la marca temporal de finalización, y el cambio de estado MUST NOT estar restringido por rol.
 - **FR-039**: El sistema MUST calcular la tasa de aprobación como la proporción de inspecciones `passed` sobre el total de inspecciones `completed`, de modo que las inspecciones `conditional` cuenten en el denominador pero no como aprobadas.
 - **FR-040**: El sistema MUST permitir navegar a Control de Calidad desde el grupo "Control de Calidad" de la barra lateral del módulo base, alternando la vista de calidad seleccionada y ocultando las vistas del módulo base; la acción "Inspeccionar" de la vista de lotes pendientes MUST abrir la vista de inspecciones con el documento origen preseleccionado.
+- **FR-041**: El sistema MUST permitir exportar en CSV UTF-8 el historial filtrado de inspecciones y resultados, con lote, producto, plan, etapa, fecha, inspector, dictamen, estado y una columna `resultados` que resuma cada criterio como `criterio:medido:cumple` separado por `;`, respetando los filtros activos, y MUST bloquear la exportación cuando los filtros sean inválidos.
+- **FR-042**: El sistema MUST permitir exportar el resumen de indicadores del dashboard (tasa de aprobación por etapa, no conformidades abiertas por severidad, CAPA vencidas, eficacia CAPA e inspecciones pendientes) y MUST informar cuando no haya datos para exportar.
+- **FR-043**: El sistema MUST permitir adjuntar evidencia a inspecciones y no conformidades, registrando nombre, tipo, tamaño, autor (empleado seleccionado en el formulario de evidencia), fecha y contenido como data URL base64; MUST aceptar solo `image/png`, `image/jpeg` y `application/pdf` de hasta 5 MB por archivo, MUST rechazar cualquier otro tipo o tamaño, y MUST rechazar cargas que superen el límite acumulado de 8 MB o la cuota de almacenamiento, conservando la evidencia existente.
+- **FR-044**: El sistema MUST conservar el vínculo de la evidencia con su inspección o no conformidad en el historial, aplicar las reglas de cascada y bloqueo de FR-026 al eliminar registros con evidencia, y MUST permitir descargar la evidencia vinculada.
+- **FR-045**: El sistema MUST permitir configurar reglas de alerta con indicador perteneciente a `approval_rate`, `open_non_conformances`, `overdue_capa`, `capa_effectiveness` o `pending_inspections`; operador perteneciente a `lt`, `lte`, `gt`, `gte` o `eq`; umbral numérico dentro del rango del indicador (0–100 para tasas y ≥ 0 para conteos); y severidad perteneciente a `info`, `warning` o `critical`; MUST validar el rango del umbral y MUST rechazar una segunda regla activa para el mismo indicador y operador.
+- **FR-046**: El sistema MUST evaluar las reglas de alerta activas contra los datos actuales y MOSTRAR en el dashboard las alertas incumplidas con indicador, valor actual, umbral y severidad; las reglas MUST persistir entre sesiones y MUST NOT bloquear operaciones ni generar no conformidades automáticas.
+- **FR-047**: El sistema MUST permitir desactivar una regla de alerta (`is_active = false`) o eliminarla; al desactivarla o eliminarla MUST dejar de mostrarse su alerta y, si se elimina, MUST retirar la regla del almacenamiento conservando el resto de reglas.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -254,6 +343,8 @@ Datos: `quality_inspections`, `quality_inspection_results`
 - **Acción CAPA**: Medida correctiva o preventiva asociada a una no conformidad, con responsable, descripción, causa raíz, tipo de acción, fecha límite y estado.
 - **Lote pendiente**: Documento origen sin inspección completada; se deriva de las dependencias externas y no se almacena como entidad propia.
 - **Producto, empleado, recepción, orden de producción y despacho**: Datos maestros y transaccionales externos al módulo; se consultan y validan, pero no se crean desde Control de Calidad.
+- **Evidencia de calidad**: Archivo de respaldo asociado a una inspección o a una no conformidad, con nombre, tipo, tamaño, autor, fecha y contenido local; solo PNG/JPG/PDF de hasta 5 MB por archivo y 8 MB acumulados.
+- **Regla de alerta de calidad**: Umbral configurable sobre un indicador del dashboard, con indicador, operador, valor límite, severidad y estado activo.
 
 ## Success Criteria *(mandatory)*
 
@@ -270,6 +361,10 @@ Datos: `quality_inspections`, `quality_inspection_results`
 - **SC-009**: La trazabilidad completa de una inspección hasta el cierre de su acción CAPA puede demostrarse en una sola consulta al historial.
 - **SC-010**: El módulo mantiene respuestas de consulta y dashboard en menos de 2 segundos con hasta 500 inspecciones almacenadas.
 - **SC-011**: El 100 % de los planes y criterios con inspecciones históricas bloquea su edición y eliminación, y el 100 % de las inspecciones completadas deja de aparecer como lote pendiente.
+- **SC-012**: El 100 % de las exportaciones respeta los filtros activos y finaliza en menos de 2 segundos con hasta 500 inspecciones almacenadas.
+- **SC-013**: El 100 % de las evidencias adjuntas queda vinculada a su inspección o no conformidad y disponible para descarga desde el historial.
+- **SC-014**: El 100 % de las alertas mostradas corresponde a reglas activas cuyo umbral se incumple con los datos almacenados, sin diferencias respecto de los registros.
+- **SC-015**: El 100 % de las cargas de evidencia que superan el límite acumulado de 8 MB o la cuota de almacenamiento se rechaza sin perder la evidencia previamente almacenada.
 
 ## Fuera de Alcance
 
@@ -279,6 +374,9 @@ Datos: `quality_inspections`, `quality_inspection_results`
 - Integración con dispositivos IoT o captura automatizada de mediciones.
 - Creación de productos, empleados, recepciones, órdenes de producción o despachos desde este módulo.
 - Valorización monetaria de no calidad y métricas por línea de producción en el MVP; se documentan como evolución futura.
+- Exportación masiva de todas las colecciones o integración con herramientas de BI.
+- Firma digital, edición o versionado avanzado de la evidencia adjunta.
+- Notificaciones por correo, SMS o mensajería externa derivadas de las alertas de calidad.
 
 ## Assumptions
 
@@ -291,3 +389,7 @@ Datos: `quality_inspections`, `quality_inspection_results`
 - Los lotes pendientes se derivan comparando los documentos origen disponibles con las inspecciones completadas; una inspección `draft` no marca el lote como inspeccionado.
 - Las métricas individuales por inspector son accesibles solo al rol de jefatura; el resto de los roles ve datos agregados por producto o etapa.
 - La versión integrada con el módulo base requiere restaurar o implementar el código base existente antes de la demo final.
+- La evidencia se limita a `image/png`, `image/jpeg` y `application/pdf`, con máximo de 5 MB por archivo y 8 MB acumulados; se almacena localmente como data URL base64 en el MVP.
+- Las exportaciones se generan en formato CSV con codificación UTF-8; la exportación del historial incluye una columna `resultados` con `criterio:medido:cumple` separado por `;`.
+- Las reglas de alerta se evalúan al abrir o actualizar el dashboard y no en tiempo real; se pueden desactivar o eliminar.
+- Las alertas son informativas y no bloquean operaciones ni generan no conformidades automáticas.

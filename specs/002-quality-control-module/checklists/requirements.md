@@ -2,6 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-11-01
+**Updated**: 2026-11-17
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -34,6 +35,10 @@
 - [x] Las reglas de edición/eliminación preservan la trazabilidad histórica
 - [x] Los lotes pendientes y la cuarentena están definidos como vistas derivadas
 - [x] Las métricas por línea y la valorización monetaria quedan fuera del MVP
+- [x] La exportación respeta los filtros activos e incluye los resultados por criterio
+- [x] La evidencia se vincula a inspecciones y no conformidades, guarda su contenido y respeta MIME, 5 MB por archivo, 8 MB acumulados y cuota
+- [x] Las reglas de alerta validan indicador, operador, severidad y rango, y pueden desactivarse o eliminarse sin bloquear operaciones
+- [x] Las historias US7–US9 se alinean con los requisitos FR-041–FR-047 y los criterios SC-012–SC-015
 
 ## Feature Readiness
 
@@ -47,3 +52,4 @@
 - La especificación se derivó de `plan.md`, `data-model.md`, `Historias-Usuarios.md` y el feedback del proyecto.
 - Las historias de lotes pendientes, parámetros de prueba, dictamen final, no conformidad, historial y cuarentena/CAPA están reflejadas en `spec.md`.
 - Los documentos de la raíz se consideran históricos; la fuente de verdad es `specs/002-quality-control-module/`.
+- Actualización 2026-11-17: se añadieron US7 (exportación), US8 (evidencia) y US9 (alertas), con FR-041–FR-047 y SC-012–SC-015; se fijaron MIME, 5 MB por archivo, 8 MB acumulados, cuota, catálogos/rangos de alertas, columna `resultados` y desactivación/eliminación de reglas.

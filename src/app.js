@@ -5,7 +5,7 @@ import { createEntityItem } from './components/entity-list.js';
 import { clearDocumentForm, startDocumentEdit, collectDocumentPayload, showDocumentErrors } from './components/document-form.js';
 import { folioLabel } from './components/document-list.js';
 import { renderLogo, applyShellLabels, setActiveModule } from './components/shell.js';
-import { renderDashboard, renderQualityDashboard } from './components/dashboard.js';
+import { renderDashboard, renderQualityDashboard, initQualityAlerts } from './components/dashboard.js';
 import { setupSearchBar, renderSearchResults } from './components/search-bar.js';
 import { renderPendingLots, initPendingLots } from './components/pending-lots.js';
 import { renderPlanConfig, initPlanConfig, clearPlanForm, clearCriterionForm } from './components/quality-plan-config.js';
@@ -325,6 +325,7 @@ function wireEvents(){
   initPendingLots({
     onInspect: (referenceModule, referenceId) => showQuality('inspections', { referenceModule, referenceId })
   });
+  initQualityAlerts();
   initPlanConfig();
   initInspectionEngine();
   initNonConformanceCapa();

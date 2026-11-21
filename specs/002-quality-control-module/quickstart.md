@@ -22,6 +22,9 @@
 11. Revise la pestaña de **cuarentena** para lotes con no conformidades abiertas y asigne o consulte su CAPA.
 12. Consulte el **historial**, filtre por lote (documento origen) y rango de fechas, y limpie los filtros.
 13. Recargue la página para confirmar que los datos persisten en `localStorage`.
+14. En el **historial**, aplique filtros y use "Exportar CSV" para descargar las inspecciones filtradas con su columna `resultados`; en el **dashboard**, exporte el resumen de KPIs.
+15. Adjunte **evidencia** (PNG, JPG o PDF de hasta 5 MB por archivo y 8 MB acumulados) a una inspección o no conformidad desde su vista de detalle y confirme que se lista y descarga.
+16. Cree una **regla de alerta** sobre un KPI con operador, umbral y severidad, confirme que la alerta aparece cuando el valor incumple el umbral, y luego desactívela o elimínela para verificar que deja de mostrarse.
 
 ## Validación
 
@@ -38,6 +41,12 @@
 - Verifique que un lote con no conformidad abierta aparece en cuarentena.
 - Verifique que los planes y criterios con inspecciones históricas no se pueden editar ni eliminar.
 - Verifique que el dashboard y el historial reflejan los datos registrados sin referencias huérfanas.
+- Verifique que el CSV del historial respeta los filtros activos, incluye la columna `resultados` y que el CSV de KPIs coincide con el dashboard.
+- Verifique que la evidencia rechaza tipos distintos de PNG/JPG/PDF, archivos mayores a 5 MB y cargas que superan 8 MB acumulados o la cuota, conservando la evidencia previa.
+- Verifique que la evidencia se elimina en cascada con su inspección sin no conformidad o con su no conformidad, y que el bloqueo de eliminación se mantiene cuando corresponde.
+- Verifique que una regla de alerta con indicador/operador/severidad no canónicos, umbral fuera de rango o duplicada se rechaza, y que al desactivarla o eliminarla deja de mostrarse.
+- Verifique que las alertas son informativas y no bloquean operaciones ni generan no conformidades.
+- Verifique que la exportación de 500 inspecciones finaliza en menos de 2 segundos.
 - Verifique que las vistas muestran estados vacíos claros cuando no hay datos.
 
 ## Integración con el Módulo Base
@@ -49,5 +58,6 @@ El módulo de calidad consume el marco y el almacenamiento del módulo base:
 3. El par `reference_module` + `reference_id` se valida contra la colección correspondiente antes de guardar la inspección.
 4. El "lote" es el documento origen; no existe una colección de lotes separada.
 5. El MVP usa identificadores `string` en `localStorage`; el modelo `INT` de `data-model.md` queda como diseño lógico con mapeo documentado.
+6. La evidencia, las reglas de alerta y la exportación CSV se gestionan localmente en el navegador y no dependen de servicios externos.
 
 Consulte `specs/002-quality-control-module/` para la especificación completa.

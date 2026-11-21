@@ -9,7 +9,9 @@ import {
   validateCorrectiveAction,
   deriveQuarantineLots,
   isCapaOverdue,
-  overrideInspection
+  overrideInspection,
+  evidenceFor,
+  deleteEvidence
 } from '../storage.js';
 import {
   buildReferenceMaps,
@@ -24,6 +26,7 @@ import {
   actionButton,
   emptyState
 } from './quality-utils.js';
+import { addEvidenceFromFile, downloadEvidence, renderEvidenceList } from './evidence.js';
 
 const NC_ERROR_FIELDS = {
   description: 'error-nc-description',
@@ -292,6 +295,80 @@ function renderQuarantine(){
   if(empty) empty.hidden = rows.length > 0;
 }
 
+export function renderNcEvidence(){
+  const select = qs('nc-evidence-nc');
+  if(!select) return;
+  const ncs = loadCollection('non_conformances');
+  populateSelect(
+    select,
+    ncs,
+    'non_conformance_id',
+    nc => `${nc.non_conformance_id} · ${nc.description.slice(0, 50)}`,
+    ncs.length ? '-- Selecciona una no conformidad --' : '-- No hay no conformidades --'
+  );
+  const records = select.value ? evidenceFor('non_conformance', select.value) : [];
+  renderEvidenceList(
+    qs('nc-evidence-list'),
+    records,
+    buildReferenceMaps(),
+    {
+      emptyMessage: select.value
+        ? 'Sin evidencia adjunta para esta no conformidad.'
+        : 'Selecciona una no conformidad para ver o adjuntar evidencia.'
+    }
+  );
+}
+
+async function handleNcEvidenceSubmit(event){
+  event.preventDefault();
+  const error = qs('nc-evidence-error');
+  if(error) error.textContent = '';
+  const entityId = qs('nc-evidence-nc').value;
+  const uploadedBy = qs('nc-evidence-author').value;
+  const fileInput = qs('nc-evidence-file');
+  const file = fileInput.files && fileInput.files[0];
+  try{
+    await addEvidenceFromFile({
+      entityType: 'non_conformance',
+      entityId,
+      file,
+      uploadedBy
+    });
+    fileInput.value = '';
+    renderNcEvidence();
+  }catch(err){
+    if(error) error.textContent = err.message;
+  }
+}
+
+function handleNcEvidenceClick(event){
+  const button = event.target.closest('button');
+  if(!button) return;
+  if(button.dataset.evidenceDownload){
+    const record = loadCollection('quality_evidence')
+      .find(item => item.id === button.dataset.evidenceDownload);
+    if(record){
+      try{
+        downloadEvidence(record);
+      }catch(err){
+        const error = qs('nc-evidence-error');
+        if(error) error.textContent = err.message;
+      }
+    }
+    return;
+  }
+  if(button.dataset.evidenceDelete){
+    if(!confirm('¿Eliminar esta evidencia?')) return;
+    try{
+      deleteEvidence(button.dataset.evidenceDelete);
+      renderNcEvidence();
+    }catch(err){
+      const error = qs('nc-evidence-error');
+      if(error) error.textContent = err.message;
+    }
+  }
+}
+
 export function renderNonConformance(){
   const ncs = loadCollection('non_conformances');
   populateSelect(
@@ -308,11 +385,19 @@ export function renderNonConformance(){
     employee => employee.name,
     '-- Selecciona un responsable --'
   );
+  populateSelect(
+    qs('nc-evidence-author'),
+    loadExternal('employees'),
+    'employee_id',
+    employee => employee.name,
+    '-- Selecciona un autor --'
+  );
   renderOverrideSelect();
   renderReview();
   renderNcList();
   renderCapaList();
   renderQuarantine();
+  renderNcEvidence();
   if(!qs('capa-due').value) qs('capa-due').value = todayIso();
 }
 
@@ -452,6 +537,9 @@ export function initNonConformanceCapa(){
   qs('capa-form').addEventListener('submit', handleCapaSubmit);
   qs('capa-cancel').addEventListener('click', clearCapaForm);
   qs('capa-list').addEventListener('click', handleCapaListClick);
+  qs('nc-evidence-form').addEventListener('submit', handleNcEvidenceSubmit);
+  qs('nc-evidence-nc').addEventListener('change', () => renderNcEvidence());
+  qs('nc-evidence-list').addEventListener('click', handleNcEvidenceClick);
   qs('review-body').addEventListener('click', event => {
     const row = event.target.closest('tr');
     if(!row) return;

@@ -1,6 +1,7 @@
 import {
   loadCollection,
-  externalDocuments
+  externalDocuments,
+  evidenceFor
 } from '../storage.js';
 import {
   buildReferenceMaps,
@@ -8,12 +9,16 @@ import {
   employeeName,
   planName,
   moduleLabel,
+  stageLabel,
   resultLabel,
   statusLabel,
+  todayIso,
   qs,
   cell,
-  emptyState
+  actionButton
 } from './quality-utils.js';
+import { rowsToCsv, downloadContent, safeFilenamePart } from './csv.js';
+import { downloadEvidence } from './evidence.js';
 
 export function currentFilters(){
   return {
@@ -35,6 +40,74 @@ export function filterInspections(inspections, filters){
     if(filters.to && inspection.inspection_date > filters.to) return false;
     return true;
   }).sort((a, b) => String(b.inspection_date).localeCompare(String(a.inspection_date)));
+}
+
+function inspectionResultSummary(inspectionId, maps, results){
+  return results
+    .filter(result => result.inspection_id === inspectionId)
+    .map(result => {
+      const criterion = maps.criteria.get(result.criteria_id);
+      const name = criterion ? criterion.criteria_name : result.criteria_id;
+      return `${name}:${result.measured_value}:${result.pass_fail ? 'Sí' : 'No'}`;
+    })
+    .join(';');
+}
+
+export function buildHistoryCsv(rows, maps, results){
+  const header = ['Lote', 'Producto', 'Plan', 'Etapa', 'Fecha', 'Inspector', 'Dictamen', 'Estado', 'Resultados'];
+  const body = (rows || []).map(inspection => {
+    const plan = maps.plans.get(inspection.inspection_plan_id);
+    return [
+      `${moduleLabel(inspection.reference_module)} ${inspection.reference_id}`,
+      plan ? productName(maps, plan.product_id) : '—',
+      planName(maps, inspection.inspection_plan_id),
+      plan ? stageLabel(plan.applicable_stage) : '—',
+      inspection.inspection_date,
+      employeeName(maps, inspection.inspector_id),
+      resultLabel(inspection.overall_result),
+      statusLabel(inspection.inspection_status),
+      inspectionResultSummary(inspection.inspection_id, maps, results)
+    ];
+  });
+  return rowsToCsv([header, ...body]);
+}
+
+export function historyCsv(rows){
+  return buildHistoryCsv(
+    rows,
+    buildReferenceMaps(),
+    loadCollection('quality_inspection_results')
+  );
+}
+
+export function exportHistoryCsv(){
+  const error = qs('history-export-error');
+  if(error) error.textContent = '';
+  const filters = currentFilters();
+  if(filters.from && filters.to && filters.from > filters.to){
+    if(error) error.textContent = 'El rango de fechas es inválido: "Desde" no puede ser posterior a "Hasta".';
+    return null;
+  }
+  const rows = filterInspections(loadCollection('quality_inspections'), filters);
+  if(rows.length === 0){
+    if(error) error.textContent = 'No hay inspecciones para exportar con los filtros aplicados.';
+    return null;
+  }
+  const content = historyCsv(rows);
+  const suffix = [
+    filters.module,
+    filters.lot ? filters.lot.replace(':', '-') : '',
+    filters.from,
+    filters.to
+  ].filter(Boolean).map(safeFilenamePart).filter(Boolean).join('_');
+  const filename = `calidad_historial_${todayIso()}${suffix ? `_${suffix}` : ''}.csv`;
+  try{
+    downloadContent(content, filename);
+  }catch(err){
+    if(error) error.textContent = err.message;
+    return null;
+  }
+  return content;
 }
 
 export function renderHistoryLotOptions(selected){
@@ -96,6 +169,18 @@ export function renderHistory(){
     const ncCapas = nc ? capas.filter(a => a.non_conformance_id === nc.non_conformance_id) : [];
     tr.appendChild(cell(ncCapas.length ? `${ncCapas.length} acción(es)` : '—'));
 
+    const evidenceCell = document.createElement('td');
+    evidenceCell.className = 'table-actions';
+    const evidence = evidenceFor('inspection', inspection.inspection_id);
+    if(evidence.length === 0){
+      evidenceCell.textContent = '—';
+    } else {
+      evidence.forEach(record => {
+        evidenceCell.appendChild(actionButton(record.file_name, 'secondary', { evidenceDownload: record.id }));
+      });
+    }
+    tr.appendChild(evidenceCell);
+
     tbody.appendChild(tr);
   });
 
@@ -113,6 +198,20 @@ export function clearHistoryFilters(){
   renderHistory();
 }
 
+function handleHistoryBodyClick(event){
+  const button = event.target.closest('button[data-evidence-download]');
+  if(!button) return;
+  const record = loadCollection('quality_evidence')
+    .find(item => item.id === button.dataset.evidenceDownload);
+  if(!record) return;
+  try{
+    downloadEvidence(record);
+  }catch(err){
+    const error = qs('history-export-error');
+    if(error) error.textContent = err.message;
+  }
+}
+
 export function initInspectionHistory(){
   const button = qs('history-apply');
   if(!button || button.dataset.wired === 'true') return;
@@ -120,4 +219,8 @@ export function initInspectionHistory(){
   button.addEventListener('click', () => renderHistory());
   qs('history-clear').addEventListener('click', () => clearHistoryFilters());
   qs('history-module').addEventListener('change', () => renderHistoryLotOptions(''));
+  const exportButton = qs('history-export');
+  if(exportButton) exportButton.addEventListener('click', () => exportHistoryCsv());
+  const body = qs('history-body');
+  if(body) body.addEventListener('click', handleHistoryBodyClick);
 }

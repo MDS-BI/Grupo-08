@@ -306,6 +306,10 @@
               </select>
             </div>
           </div>
+          <div class="form-actions">
+            <button type="button" id="dashboard-export" class="secondary">Exportar KPIs (CSV)</button>
+          </div>
+          <div class="error" id="dashboard-export-error" aria-live="polite"></div>
 
           <div class="stat-grid">
             <div class="stat-card">
@@ -329,6 +333,62 @@
               <span class="stat-label">Inspecciones pendientes (draft)</span>
             </div>
           </div>
+
+          <section class="card" aria-labelledby="quality-alerts-heading">
+            <h2 id="quality-alerts-heading">Alertas de calidad</h2>
+            <div id="quality-alerts" class="empty">Sin alertas: todas las reglas activas se cumplen o no hay reglas configuradas.</div>
+
+            <h3>Reglas de alerta</h3>
+            <div id="alert-rule-list" class="empty">No hay reglas de alerta configuradas.</div>
+            <form id="alert-form">
+              <input type="hidden" id="alert-id" />
+              <div class="field-row">
+                <div>
+                  <label for="alert-metric">Indicador *</label>
+                  <select id="alert-metric" name="alert-metric">
+                    <option value="approval_rate">Tasa de aprobación</option>
+                    <option value="open_non_conformances">No conformidades abiertas</option>
+                    <option value="overdue_capa">Acciones CAPA vencidas</option>
+                    <option value="capa_effectiveness">Eficacia CAPA</option>
+                    <option value="pending_inspections">Inspecciones pendientes</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="alert-operator">Operador *</label>
+                  <select id="alert-operator" name="alert-operator">
+                    <option value="lt">&lt;</option>
+                    <option value="lte">≤</option>
+                    <option value="gt">&gt;</option>
+                    <option value="gte">≥</option>
+                    <option value="eq">=</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-row">
+                <div>
+                  <label for="alert-threshold">Umbral *</label>
+                  <input id="alert-threshold" name="alert-threshold" type="number" step="any" />
+                </div>
+                <div>
+                  <label for="alert-severity">Severidad *</label>
+                  <select id="alert-severity" name="alert-severity">
+                    <option value="info">Informativa</option>
+                    <option value="warning">Advertencia</option>
+                    <option value="critical">Crítica</option>
+                  </select>
+                </div>
+              </div>
+              <div class="checkbox-row">
+                <input id="alert-active" name="alert-active" type="checkbox" checked />
+                <label for="alert-active">Regla activa</label>
+              </div>
+              <div class="error" id="alert-error" aria-live="polite"></div>
+              <div class="form-actions">
+                <button type="submit" class="primary">Guardar regla</button>
+                <button type="button" id="alert-cancel" class="secondary" hidden>Cancelar edición</button>
+              </div>
+            </form>
+          </section>
 
           <section class="card" aria-labelledby="approval-stage-heading">
             <h2 id="approval-stage-heading">Tasa de aprobación por etapa</h2>
@@ -525,6 +585,32 @@
             </form>
           </section>
 
+          <section class="card" aria-labelledby="inspection-evidence-heading">
+            <h2 id="inspection-evidence-heading">Evidencia de la inspección</h2>
+            <p class="muted">Adjunta archivos PNG, JPG o PDF de hasta 5 MB por archivo y 8 MB acumulados.</p>
+            <form id="inspection-evidence-form">
+              <div class="field-row">
+                <div>
+                  <label for="inspection-evidence-inspection">Inspección *</label>
+                  <select id="inspection-evidence-inspection" name="inspection-evidence-inspection"></select>
+                </div>
+                <div>
+                  <label for="inspection-evidence-author">Autor *</label>
+                  <select id="inspection-evidence-author" name="inspection-evidence-author"></select>
+                </div>
+              </div>
+              <div>
+                <label for="inspection-evidence-file">Archivo *</label>
+                <input id="inspection-evidence-file" name="inspection-evidence-file" type="file" accept="image/png,image/jpeg,application/pdf" />
+              </div>
+              <div class="error" id="inspection-evidence-error" aria-live="polite"></div>
+              <div class="form-actions">
+                <button type="submit" class="primary">Adjuntar evidencia</button>
+              </div>
+            </form>
+            <div id="inspection-evidence-list" class="empty">Sin evidencia adjunta.</div>
+          </section>
+
           <section class="card" aria-labelledby="drafts-heading">
             <h2 id="drafts-heading">Inspecciones en borrador</h2>
             <div id="inspection-drafts" class="empty">No hay inspecciones en borrador.</div>
@@ -622,6 +708,32 @@
                 <button type="button" id="nc-cancel" class="secondary" hidden>Cancelar edición</button>
               </div>
             </form>
+          </section>
+
+          <section class="card" aria-labelledby="nc-evidence-heading">
+            <h2 id="nc-evidence-heading">Evidencia de no conformidad</h2>
+            <p class="muted">Adjunta archivos PNG, JPG o PDF de hasta 5 MB por archivo y 8 MB acumulados.</p>
+            <form id="nc-evidence-form">
+              <div class="field-row">
+                <div>
+                  <label for="nc-evidence-nc">No conformidad *</label>
+                  <select id="nc-evidence-nc" name="nc-evidence-nc"></select>
+                </div>
+                <div>
+                  <label for="nc-evidence-author">Autor *</label>
+                  <select id="nc-evidence-author" name="nc-evidence-author"></select>
+                </div>
+              </div>
+              <div>
+                <label for="nc-evidence-file">Archivo *</label>
+                <input id="nc-evidence-file" name="nc-evidence-file" type="file" accept="image/png,image/jpeg,application/pdf" />
+              </div>
+              <div class="error" id="nc-evidence-error" aria-live="polite"></div>
+              <div class="form-actions">
+                <button type="submit" class="primary">Adjuntar evidencia</button>
+              </div>
+            </form>
+            <div id="nc-evidence-list" class="empty">Sin evidencia adjunta.</div>
           </section>
 
           <section class="card" aria-labelledby="capa-heading">
@@ -730,9 +842,11 @@
               </div>
             </div>
             <div class="error" id="history-error" aria-live="polite"></div>
+            <div class="error" id="history-export-error" aria-live="polite"></div>
             <div class="form-actions">
               <button type="button" id="history-apply" class="primary">Aplicar filtros</button>
               <button type="button" id="history-clear" class="secondary">Limpiar filtros</button>
+              <button type="button" id="history-export" class="secondary">Exportar CSV</button>
             </div>
           </section>
 
@@ -742,7 +856,7 @@
               <thead>
                 <tr>
                   <th>Fecha</th><th>Lote</th><th>Producto</th><th>Plan</th><th>Inspector</th>
-                  <th>Estado</th><th>Dictamen</th><th>No conformidad</th><th>CAPA</th>
+                  <th>Estado</th><th>Dictamen</th><th>No conformidad</th><th>CAPA</th><th>Evidencia</th>
                 </tr>
               </thead>
               <tbody id="history-body"></tbody>

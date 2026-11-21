@@ -480,6 +480,30 @@ button.danger:hover { background: #fae3df; }
 .checkbox-row input { width: auto; }
 .checkbox-row label { margin: 0; font-weight: 500; }
 
+.evidence-list { display: grid; gap: 8px; margin-top: 10px; }
+.evidence-item,
+.alert-rule-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  flex-wrap: wrap;
+}
+.alert-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.badge-info { border-color: #c3d7f0; color: #1d4f91; background: #eef5fd; }
+.badge-warning { border-color: #f3d9a4; color: #8a5a00; background: #fdf6e7; }
 .badge-critical { border-color: #f2c4bd; color: var(--danger); background: #fdf1ef; }
 .badge-major { border-color: #f3d9a4; color: #8a5a00; background: #fdf6e7; }
 .badge-minor { border-color: #c3cdde; color: var(--muted); background: #f2f4f8; }
