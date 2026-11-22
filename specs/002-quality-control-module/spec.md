@@ -6,7 +6,7 @@
 
 **Status**: Draft
 
-**Updated**: 2026-11-17 — se añadieron las historias US7–US9 (exportación, evidencia y alertas) y se resolvieron las decisiones de contenido/límites de evidencia, alcance del CSV, catálogos y rangos de alertas, y desactivación/eliminación de reglas.
+**Updated**: 2026-11-22 — se añadieron las historias US7–US9 (exportación, evidencia y alertas), US10 (bitácora de auditoría) y se resolvieron las decisiones de contenido/límites de evidencia, alcance del CSV, catálogos y rangos de alertas, desactivación/eliminación de reglas y numeración única de tareas.
 
 **Input**: User description: "Añadir la especificación del módulo de Control de Calidad a `specs/002-quality-control-module`, a partir de `plan.md`, `data-model.md`, `Historias-Usuarios.md` y el feedback del proyecto."
 
@@ -48,6 +48,14 @@
 - Q: ¿Qué catálogo y rangos deben validarse en las reglas de alerta? → A: Indicadores `approval_rate` (0–100), `open_non_conformances` (≥ 0), `overdue_capa` (≥ 0), `capa_effectiveness` (0–100) y `pending_inspections` (≥ 0); operadores `lt`, `lte`, `gt`, `gte`, `eq`; severidad `info`, `warning`, `critical`.
 - Q: ¿El CSV del historial debe incluir los resultados por criterio? → A: Sí, una fila por inspección con las columnas de inspección y una columna `resultados` que resuma cada criterio como `criterio:medido:cumple` separado por `;`.
 - Q: ¿Se pueden desactivar o eliminar las reglas de alerta? → A: Sí; al desactivarlas (`is_active = false`) o eliminarlas, su alerta deja de mostrarse y la regla se conserva o se retira del almacenamiento según la acción.
+
+### Session 2026-11-22
+
+- Q: ¿Qué actor se registra en la bitácora si no hay autenticación multiusuario? → A: El empleado seleccionado en la operación (`inspector_id`, `overridden_by` o responsable CAPA); solo si la operación no expone un empleado se usa el rol activo de `erp_quality:viewer_role` como metadato de auditoría, sin habilitar ni restringir acciones (FR-028).
+- Q: ¿Cómo se identifica el lote en una entrada de bitácora tras eliminar el registro auditado? → A: Cada entrada persiste `reference_module` + `reference_id` del documento origen, de modo que el filtro por lote sigue funcionando aunque la inspección, la NC o la CAPA ya no existan.
+- Q: ¿Qué significan valor anterior y valor nuevo en `create` y `delete`? → A: En `create`, valor anterior es `null` y valor nuevo es el estado inicial; en `delete`, valor anterior es el último valor y valor nuevo es `null`; en `update` y `status_change` ambos están definidos.
+- Q: ¿Se permite eliminar directamente una acción CAPA? → A: Sí, desde el formulario de CAPA; su entrada `delete` permanece en la bitácora y no altera la cascada de FR-026 al eliminar la no conformidad.
+- Q: ¿Cómo deben resolverse los IDs duplicados T056–T060 entre las fases y el "Registro de Modificaciones" de `tasks.md`? → A: Renumerar las entradas del registro histórico como T094–T098.
 
 ## Problema y Solución
 
@@ -248,6 +256,29 @@ Datos: `quality_inspections`, `non_conformances`, `corrective_actions`, `quality
 5. **Given** reglas configuradas, **When** se recarga la aplicación, **Then** las reglas y sus alertas se recalculan y permanecen disponibles.
 6. **Given** una regla que ya no se necesita, **When** el Jefe de Calidad la desactiva o elimina, **Then** deja de mostrarse la alerta asociada.
 
+---
+
+### User Story 10 - Auditar cambios sobre registros de calidad (Priority: P10)
+
+Como Gerente de Operaciones (rol `gerente`), quiero consultar una bitácora de los cambios realizados sobre inspecciones, no conformidades y acciones CAPA —qué cambió, quién lo hizo, cuándo y por qué—, para demostrar trazabilidad ante una auditoría incluso cuando el registro ya fue eliminado.
+
+**Why this priority**: Complementa US3, US4, US6 y US7: actualmente solo quedan registrados el cambio de dictamen y el cierre de CAPA, mientras que el resto de altas, ediciones y eliminaciones no son consultables. No bloquea el flujo operativo del MVP.
+
+**Independent Test**: Generar una inspección, cambiar su dictamen con justificación, cerrar la NC correspondiente y verificar que la bitácora muestra las tres acciones filtrando por lote y rango de fechas.
+
+Datos: `quality_audit_log` (nueva colección: entidad (`inspection`/`non_conformance`/`corrective_action`), ID de registro, `reference_module` + `reference_id` del lote, acción (`create`/`update`/`status_change`/`delete`), campo modificado, valor anterior, valor nuevo, usuario/actor, marca temporal ISO y justificación), `quality_inspections`, `non_conformances`, `corrective_actions`
+
+**Acceptance Scenarios**:
+
+1. **Given** inspecciones, no conformidades o acciones CAPA creadas o editadas, **When** se abre la bitácora, **Then** se listan entradas con entidad, ID de registro, acción (`create`, `update`, `status_change` o `delete`), campo modificado con valor anterior y nuevo, usuario y fecha.
+2. **Given** un cambio de dictamen con justificación, **When** se consulta la bitácora, **Then** aparecen la justificación, el usuario y la fecha, sin generar una segunda entrada duplicada.
+3. **Given** una no conformidad cerrada o una acción CAPA fijada en `completed`, **When** se consulta la bitácora, **Then** se registra el cambio de estado y su marca temporal.
+4. **Given** una eliminación permitida (inspección sin no conformidad, CAPA eliminada directamente o no conformidad con CAPA en cascada), **When** se elimina el registro, **Then** su entrada de auditoría permanece consultable aunque el registro ya no exista.
+5. **Given** varias entradas en la bitácora, **When** se filtra por lote (documento origen), tipo de entidad o rango de fechas, **Then** se muestran solo las coincidencias, con una acción para limpiar filtros y un estado vacío claro cuando no haya resultados.
+6. **Given** un rango de fechas inválido (desde posterior a hasta), **When** se intenta aplicar, **Then** se informa el error y no se modifica la vista, igual que en US6.
+
+---
+
 ### Edge Cases
 
 - Medición exactamente igual a un límite de tolerancia: se considera dentro del rango.
@@ -280,6 +311,11 @@ Datos: `quality_inspections`, `non_conformances`, `corrective_actions`, `quality
 - Segunda regla de alerta para el mismo indicador y operador: se rechaza para evitar alertas duplicadas.
 - Regla de alerta desactivada o eliminada: deja de mostrarse su alerta; si se elimina, se retira del almacenamiento.
 - Regla de alerta incumplida: la alerta es informativa y no bloquea operaciones ni genera no conformidades automáticas.
+- `quality_audit_log` conserva `reference_module` + `reference_id` aunque el registro auditado ya no exista; el filtro por lote sigue funcionando.
+- Valor anterior/nuevo en la bitácora: `create` usa anterior `null` y nuevo = estado inicial; `delete` usa anterior = último valor y nuevo `null`; `update`/`status_change` registran ambos.
+- Eliminación directa de una CAPA: permitida desde el formulario de CAPA; su entrada `delete` permanece y no altera la cascada de FR-026 al eliminar la no conformidad.
+- Rango de fechas inválido en la bitácora (desde posterior a hasta): se informa y no se aplica, igual que en US6.
+- Cambio de dictamen con justificación: genera una sola entrada `status_change`, sin una segunda entrada `update` duplicada.
 
 ## Requirements *(mandatory)*
 
@@ -332,6 +368,9 @@ Datos: `quality_inspections`, `non_conformances`, `corrective_actions`, `quality
 - **FR-045**: El sistema MUST permitir configurar reglas de alerta con indicador perteneciente a `approval_rate`, `open_non_conformances`, `overdue_capa`, `capa_effectiveness` o `pending_inspections`; operador perteneciente a `lt`, `lte`, `gt`, `gte` o `eq`; umbral numérico dentro del rango del indicador (0–100 para tasas y ≥ 0 para conteos); y severidad perteneciente a `info`, `warning` o `critical`; MUST validar el rango del umbral y MUST rechazar una segunda regla activa para el mismo indicador y operador.
 - **FR-046**: El sistema MUST evaluar las reglas de alerta activas contra los datos actuales y MOSTRAR en el dashboard las alertas incumplidas con indicador, valor actual, umbral y severidad; las reglas MUST persistir entre sesiones y MUST NOT bloquear operaciones ni generar no conformidades automáticas.
 - **FR-047**: El sistema MUST permitir desactivar una regla de alerta (`is_active = false`) o eliminarla; al desactivarla o eliminarla MUST dejar de mostrarse su alerta y, si se elimina, MUST retirar la regla del almacenamiento conservando el resto de reglas.
+- **FR-048**: El sistema MUST registrar en `quality_audit_log` cada alta, edición, cambio de estado y eliminación permitida sobre inspecciones (`inspection`), no conformidades (`non_conformance`) y acciones CAPA (`corrective_action`), con `entity_type`, `entity_id`, `reference_module` + `reference_id` del lote, `action` perteneciente a `create`, `update`, `status_change` o `delete`, `changed_field`, `before_value`, `after_value`, `actor`, `timestamp` ISO y `justification` cuando aplique. El actor MUST ser el empleado seleccionado en la operación (`inspector_id`, `overridden_by` o responsable CAPA); solo si la operación no expone empleado, el rol activo de `erp_quality:viewer_role` se usa como metadato sin habilitar ni restringir acciones.
+- **FR-049**: El sistema MUST conservar las entradas de auditoría tras eliminaciones permitidas (incluida la eliminación directa de una CAPA y las cascadas de FR-026), MUST interpretar `before_value = null` en `create` y `after_value = null` en `delete`, y MUST permitir filtrar la bitácora por lote (`reference_module` + `reference_id`), `entity_type` y rango de fechas sobre `timestamp`, con acción visible para limpiar filtros y estado vacío claro cuando no haya coincidencias.
+- **FR-050**: El sistema MUST emitir una sola entrada `status_change` para el cambio de dictamen con justificación de FR-014/FR-032, sin duplicarla como `update` genérico, y MUST rechazar un rango de fechas inválido (`desde > hasta`) informando el error sin modificar la vista, igual que en US6.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -345,6 +384,7 @@ Datos: `quality_inspections`, `non_conformances`, `corrective_actions`, `quality
 - **Producto, empleado, recepción, orden de producción y despacho**: Datos maestros y transaccionales externos al módulo; se consultan y validan, pero no se crean desde Control de Calidad.
 - **Evidencia de calidad**: Archivo de respaldo asociado a una inspección o a una no conformidad, con nombre, tipo, tamaño, autor, fecha y contenido local; solo PNG/JPG/PDF de hasta 5 MB por archivo y 8 MB acumulados.
 - **Regla de alerta de calidad**: Umbral configurable sobre un indicador del dashboard, con indicador, operador, valor límite, severidad y estado activo.
+- **Entrada de bitácora de auditoría**: Registro inmutable de una acción sobre inspección, NC o CAPA, con lote persistido, entidad, acción, campo y valores anterior/nuevo, actor, marca temporal ISO y justificación; permanece tras la eliminación del registro auditado.
 
 ## Success Criteria *(mandatory)*
 
@@ -365,6 +405,7 @@ Datos: `quality_inspections`, `non_conformances`, `corrective_actions`, `quality
 - **SC-013**: El 100 % de las evidencias adjuntas queda vinculada a su inspección o no conformidad y disponible para descarga desde el historial.
 - **SC-014**: El 100 % de las alertas mostradas corresponde a reglas activas cuyo umbral se incumple con los datos almacenados, sin diferencias respecto de los registros.
 - **SC-015**: El 100 % de las cargas de evidencia que superan el límite acumulado de 8 MB o la cuota de almacenamiento se rechaza sin perder la evidencia previamente almacenada.
+- **SC-016**: El 100 % de las altas, ediciones, cambios de estado y eliminaciones permitidas sobre inspecciones, no conformidades y CAPA queda registrado en la bitácora con lote, actor, marca temporal y justificación cuando corresponda, sin entradas duplicadas para el override; la consulta filtrada devuelve solo coincidencias en menos de 2 segundos con hasta 500 inspecciones almacenadas.
 
 ## Fuera de Alcance
 
@@ -380,7 +421,8 @@ Datos: `quality_inspections`, `non_conformances`, `corrective_actions`, `quality
 
 ## Assumptions
 
-- El módulo se usa en una sola organización y no requiere autenticación multiusuario en el MVP; el usuario y rol activos se seleccionan en la interfaz y se persisten localmente; el rol solo restringe el detalle individual por inspector.
+- El módulo se usa en una sola organización y no requiere autenticación multiusuario en el MVP; el usuario y rol activos se seleccionan en la interfaz y se persisten localmente; el rol solo restringe el detalle individual por inspector y, en su defecto, se usa como metadato de auditoría sin habilitar otras acciones.
+- La numeración de tareas en `tasks.md` es única dentro de la feature; las entradas históricas del "Registro de Modificaciones" usan T094–T098 para no colisionar con T056–T060 de las fases.
 - Los productos, empleados, recepciones, órdenes de producción y despachos son dependencias externas provistas como datos semilla para pruebas y demo.
 - Las tolerancias se interpretan como límites inclusivos y los valores medidos son numéricos.
 - El volumen esperado es de hasta 500 inspecciones almacenadas; volúmenes mayores quedan fuera del MVP.

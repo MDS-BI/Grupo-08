@@ -167,10 +167,11 @@ The quality views add inspection plans, inspections, non-conformances, CAPA acti
 - **CSV export** - the history exports the filtered inspections with a `resultados` column formatted as `criterio:medido:cumple` separated by `;`. The dashboard exports the current KPI summary. Invalid date ranges and empty result sets are rejected with a visible message.
 - **Evidence** - inspections and non-conformances accept PNG, JPG, or PDF files up to 5 MB each and 8 MB accumulated. Evidence stores the author, upload date, and base64 content in `localStorage`; evidence is removed in cascade when its inspection (without a non-conformance) or non-conformance is deleted.
 - **Alerts** - the dashboard stores alert rules with metric, operator, threshold, severity, and active status. Active rules are evaluated whenever the dashboard opens or refreshes. Rules can be edited, deactivated, or deleted; duplicate active rules for the same metric and operator are rejected.
+- **Audit log** - the **Bitácora** view stores `quality_audit_log` entries for creates, edits, status changes and allowed deletions over inspections, non-conformances and CAPA actions. Entries keep the source lot (`reference_module` + `reference_id`) so filtering still works after the audited record is gone; `delete` entries survive direct and cascaded deletions, and a verdict override emits a single `status_change` with its justification.
 
 ## Notes
 
 - Data is persisted to `localStorage` under the keys `erp_base_module:entities` and `erp_base_module:documents`.
-- Quality data uses the `erp_quality:*` keys, including `quality_evidence` and `quality_alert_rules`.
+- Quality data uses the `erp_quality:*` keys, including `quality_evidence`, `quality_alert_rules` and `quality_audit_log`.
 - Deleting an entity also deletes its documents (cascade).
 - This project intentionally uses vanilla HTML, CSS, and JavaScript for simplicity.

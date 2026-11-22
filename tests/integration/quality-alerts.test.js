@@ -3,7 +3,6 @@ import {
   ensureSeedData,
   addAlertRule,
   updateAlertRule,
-  deleteAlertRule,
   deriveAlerts,
   loadCollection
 } from '../../src/storage.js';

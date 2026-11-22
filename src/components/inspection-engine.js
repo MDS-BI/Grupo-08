@@ -33,9 +33,49 @@ const INSPECTION_ERROR_FIELDS = {
   inspection_date: 'error-inspection-date'
 };
 
-function enabledPlans(){
+const STAGE_BY_MODULE = Object.freeze({
+  goods_receipt: 'incoming',
+  production_order: 'in_process',
+  shipment: 'final'
+});
+
+function referenceContext(referenceModule, referenceId){
+  const module = referenceModule || (qs('inspection-module') ? qs('inspection-module').value : '') || 'goods_receipt';
+  const reference = referenceId !== undefined
+    ? referenceId
+    : (qs('inspection-reference') ? qs('inspection-reference').value : '');
+  const document = reference
+    ? externalDocuments().find(doc => doc.reference_module === module && doc.reference_id === reference)
+    : null;
+  return { module, reference, productId: document ? document.product_id : '', stage: STAGE_BY_MODULE[module] || '' };
+}
+
+function enabledPlans(context = {}){
   return loadCollection('quality_inspection_plans')
-    .filter(plan => planCriteria(plan.inspection_plan_id).length > 0);
+    .filter(plan => planCriteria(plan.inspection_plan_id).length > 0)
+    .filter(plan => !context.productId || !context.stage
+      || (plan.product_id === context.productId && plan.applicable_stage === context.stage));
+}
+
+function findResumableDrafts(referenceModule, referenceId, planId){
+  return loadCollection('quality_inspections')
+    .filter(inspection => inspection.inspection_status === 'draft'
+      && inspection.reference_module === referenceModule
+      && inspection.reference_id === referenceId
+      && inspection.inspection_plan_id === planId)
+    .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+}
+
+function resumeDraft(referenceModule, referenceId, planId){
+  const drafts = findResumableDrafts(referenceModule, referenceId, planId);
+  if(drafts.length === 0) return null;
+  loadDraft(drafts[0]);
+  const error = qs('inspection-error');
+  if(error && drafts.length > 1){
+    error.textContent = `Hay ${drafts.length} borradores para este lote y plan; se reanudó el más reciente.`;
+    error.classList.add('info');
+  }
+  return drafts[0];
 }
 
 export function selectedPlan(explicitPlanId){
@@ -445,16 +485,19 @@ function handleInspectionEvidenceClick(event){
   }
 }
 
-export function renderInspectionView(){
+export function renderInspectionView(options = {}){
   const planSelect = qs('inspection-plan');
   if(!planSelect) return;
-  populateSelect(planSelect, enabledPlans(), 'inspection_plan_id', plan => `${plan.plan_name} · ${stageLabel(plan.applicable_stage)}`, '-- Selecciona un plan habilitado --');
-  populateSelect(qs('inspection-inspector'), loadExternal('employees'), 'employee_id', 'name', '-- Selecciona un inspector --');
-
   const moduleSelect = qs('inspection-module');
-  const module = moduleSelect.value || 'goods_receipt';
+  const module = options.referenceModule || moduleSelect.value || 'goods_receipt';
   moduleSelect.value = module;
-  renderReferenceOptions(module);
+  const selectedReference = options.referenceId !== undefined
+    ? options.referenceId
+    : (qs('inspection-reference') ? qs('inspection-reference').value : '');
+  renderReferenceOptions(module, selectedReference);
+  const context = referenceContext(module, qs('inspection-reference') ? qs('inspection-reference').value : '');
+  populateSelect(planSelect, enabledPlans(context), 'inspection_plan_id', plan => `${plan.plan_name} · ${stageLabel(plan.applicable_stage)}`, '-- Selecciona un plan habilitado --');
+  populateSelect(qs('inspection-inspector'), loadExternal('employees'), 'employee_id', 'name', '-- Selecciona un inspector --');
 
   if(!qs('inspection-date').value) qs('inspection-date').value = todayIso();
   populateSelect(
@@ -479,18 +522,21 @@ export function renderInspectionView(){
 }
 
 export function startInspection(referenceModule, referenceId){
-  renderInspectionView();
   qs('inspection-id').value = '';
-  qs('inspection-module').value = referenceModule;
-  renderReferenceOptions(referenceModule, referenceId);
-  qs('inspection-reference').value = referenceId;
-  qs('inspection-date').value = todayIso();
+  renderInspectionView({ referenceModule, referenceId });
   const error = qs('inspection-error');
-  if(error) error.textContent = '';
+  if(error){ error.textContent = ''; error.classList.remove('info'); }
   const verdict = qs('inspection-verdict');
   if(verdict) verdict.hidden = true;
+  const planSelect = qs('inspection-plan');
+  if(referenceId && planSelect.options.length === 2){
+    const onlyPlan = planSelect.options[1].value;
+    if(onlyPlan) planSelect.value = onlyPlan;
+  }
+  if(referenceId && planSelect.value) resumeDraft(referenceModule, referenceId, planSelect.value);
+  if(!qs('inspection-id').value) qs('inspection-date').value = todayIso();
   previewEvaluation();
-  qs('inspection-plan').focus();
+  planSelect.focus();
 }
 
 export function initInspectionEngine(){
@@ -499,11 +545,28 @@ export function initInspectionEngine(){
   form.dataset.wired = 'true';
 
   qs('inspection-plan').addEventListener('change', () => {
-    renderMeasurements(qs('inspection-plan').value);
-    previewEvaluation();
+    const context = referenceContext();
+    const resumed = context.reference && qs('inspection-plan').value
+      ? resumeDraft(context.module, context.reference, qs('inspection-plan').value)
+      : null;
+    if(!resumed){
+      renderMeasurements(qs('inspection-plan').value);
+      previewEvaluation();
+    }
   });
   qs('inspection-module').addEventListener('change', () => {
-    renderReferenceOptions(qs('inspection-module').value, '');
+    qs('inspection-id').value = '';
+    renderInspectionView({ referenceModule: qs('inspection-module').value, referenceId: '' });
+    previewEvaluation();
+  });
+  qs('inspection-reference').addEventListener('change', () => {
+    qs('inspection-id').value = '';
+    renderInspectionView({ referenceModule: qs('inspection-module').value, referenceId: qs('inspection-reference').value });
+    const context = referenceContext();
+    if(context.reference && qs('inspection-plan').value){
+      resumeDraft(context.module, context.reference, qs('inspection-plan').value);
+    }
+    previewEvaluation();
   });
   qs('inspection-measurements').addEventListener('input', () => previewEvaluation());
   qs('inspection-save-draft').addEventListener('click', () => handleSaveDraft());

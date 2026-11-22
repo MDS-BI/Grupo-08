@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   ensureSeedData,
   addPlan,
@@ -101,6 +101,44 @@ describe('User Story 4 - review, override and quarantine', () => {
 
     const stored = loadCollection('quality_inspections').find(i => i.inspection_id === inspection.inspection_id);
     expect(stored.overall_result).toBe('passed');
+  });
+
+  it('allows a manual failed verdict without generating a non-conformance (FR-034)', () => {
+    const { inspection } = createInspection({ reference: 'gr-002', critical: false, result: 'conditional' });
+    expect(loadCollection('non_conformances').length).toBe(0);
+    qs('nav-quality-nc').click();
+
+    fillOverride(inspection, 'failed', 'Rechazo documentado del lote');
+    submit(dom.window, 'override-form');
+
+    const stored = loadCollection('quality_inspections').find(i => i.inspection_id === inspection.inspection_id);
+    expect(stored.overall_result).toBe('failed');
+    expect(stored.inspection_status).toBe('completed');
+    expect(stored.override_at).toBeDefined();
+    expect(loadCollection('non_conformances').length).toBe(0);
+  });
+
+  it('requires confirmation and a reason before a manual rejection', () => {
+    const { inspection } = createInspection({ reference: 'gr-002', critical: false, result: 'conditional' });
+    qs('nav-quality-nc').click();
+
+    fillOverride(inspection, 'failed', '');
+    submit(dom.window, 'override-form');
+    expect(qs('override-error').textContent).toContain('justificación');
+
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    fillOverride(inspection, 'failed', 'Rechazo documentado');
+    submit(dom.window, 'override-form');
+    let stored = loadCollection('quality_inspections').find(i => i.inspection_id === inspection.inspection_id);
+    expect(stored.overall_result).toBe('conditional');
+    expect(confirmSpy).toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    submit(dom.window, 'override-form');
+    stored = loadCollection('quality_inspections').find(i => i.inspection_id === inspection.inspection_id);
+    expect(stored.overall_result).toBe('failed');
+    expect(stored.override_justification).toBe('Rechazo documentado');
+    confirmSpy.mockRestore();
   });
 
   it('lists the lot in quarantine with the treatment label when CAPA exists', () => {

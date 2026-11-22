@@ -17,7 +17,6 @@ import {
   buildReferenceMaps,
   productName,
   employeeName,
-  planName,
   moduleLabel,
   resultLabel,
   todayIso,
@@ -430,11 +429,21 @@ function handleOverrideSubmit(event){
   event.preventDefault();
   const error = qs('override-error');
   error.textContent = '';
+  const targetResult = qs('override-result').value;
+  const justification = qs('override-justification').value.trim();
+  if(targetResult === 'failed'){
+    if(!justification){
+      error.textContent = 'La justificación es obligatoria para rechazar el lote.';
+      return;
+    }
+    if(typeof globalThis.confirm === 'function'
+      && !globalThis.confirm('¿Rechazar el lote? El dictamen pasará a reprobado.')) return;
+  }
   try{
     overrideInspection(
       qs('override-inspection').value,
-      qs('override-result').value,
-      qs('override-justification').value,
+      targetResult,
+      justification,
       qs('override-user').value
     );
     qs('override-justification').value = '';

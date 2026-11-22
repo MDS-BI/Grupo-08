@@ -2,7 +2,7 @@
 
 **Purpose**: Validate the completeness, clarity, consistency, measurability, and coverage of the Control de Calidad requirements before implementation.
 **Created**: 2026-11-01
-**Updated**: 2026-11-17
+**Updated**: 2026-11-22
 **Feature**: [spec.md](../spec.md)
 **Scope**: Requirements quality only; this checklist does not verify implementation behavior.
 **Depth**: Standard
@@ -32,12 +32,12 @@
 - [x] CHK014 Do inspection state and dictamen requirements align across spec, plan, and tasks? [Consistency, Spec §FR-005, §FR-012, Plan §6, Tasks T052] — Sí: `draft/completed` y `passed/failed/conditional`/`null` coherentes en spec, plan §6, data-model/contratos y tareas/flujo implementado.
 - [x] CHK015 Do non-conformity statuses and quarantine conditions align without overlap or contradiction? [Consistency, Spec §FR-016, §FR-031, Data Model §3.5] — Sí: cuarentena derivada de NC `open`/`under_review` y salida en `closed`; sin entidad de cuarentena separada (FR-016/031/035).
 - [x] CHK016 Do role-based visibility requirements align across functional requirements and assumptions? [Consistency, Spec §FR-028, §Assumptions] — Sí: selector de rol persistido, métricas agregadas para todos y detalle por inspector solo `jefe_calidad` (FR-028, §Assumptions, dashboard).
-- [x] CHK017 Are story priorities coherent with the stated dependencies and delivery phases? [Consistency, Spec §US1–§US9, Plan §11] — Sí: P1→P9 sigue dependencias funcionales y fases/orden de tareas (plan §11, tasks dependencias US1–US9).
+- [x] CHK017 Are story priorities coherent with the stated dependencies and delivery phases? [Consistency, Spec §US1–§US10, Plan §11] — Sí: P1→P10 sigue dependencias funcionales y fases/orden de tareas (plan §11, tasks dependencias US1–US10; US10 en Fase 13).
 - [x] CHK018 Do performance targets align between success criteria, plan acceptance criteria, and validation tasks? [Consistency, Spec §SC-006, §SC-010, Plan §12, Tasks T092] — Sí: <1s percibido en búsqueda filtrada y <2s con hasta 500 inspecciones para consultas/dashboard (SC-006/010, plan §12, quickstart/T051). Nota: task ID de validación referenciado varía en el checklist original (“T092”), pero el criterio de rendimiento está especificado y mapeado (p.ej. T051).
 
 ## Acceptance Criteria Quality
 
-- [x] CHK019 Are all success criteria expressed with measurable thresholds or percentages? [Measurability, Spec §SC-001–§SC-015] — Sí: SC-001–SC-015 usan tiempos, porcentajes (100%/0%/90%) o condiciones cuantificables.
+- [x] CHK019 Are all success criteria expressed with measurable thresholds or percentages? [Measurability, Spec §SC-001–§SC-016] — Sí: SC-001–SC-016 usan tiempos, porcentajes (100%/0%/90%) o condiciones cuantificables.
 - [x] CHK020 Is the denominator and time window for the approval-rate indicator explicitly defined? [Measurability, Spec §FR-020, Plan §9] — Sí: tasa = inspecciones `passed` / total de inspecciones `completed` (FR-039, plan §9), por etapa; `conditional` cuenta en denominador, no en numerador.
 - [x] CHK021 Is the CAPA-effectiveness formula explicit enough to be computed consistently? [Measurability, Spec §FR-020, Plan §9] — Sí: porcentaje de acciones `completed` dentro de `due_date` (FR-020, plan §9, dashboard).
 - [x] CHK022 Are empty-state requirements objectively testable for dashboard, pending lots, quarantine, history, conditional review, export, evidence, and alerts? [Measurability, Spec §FR-024, Tasks T074/T077] — Sí: FR-024 exige estados vacíos claros en dashboard, lotes pendientes, cuarentena, historial, revisión condicional, exportación, evidencia y alertas (reflejado en componentes). Nota: referencia de tarea original (“T084”) difiere de numeración actual, pero el requisito es medible.
@@ -53,7 +53,7 @@
 ## Edge Case Coverage
 
 - [x] CHK028 Are boundary cases for inclusive tolerances and exact limits explicitly defined? [Edge Case, Spec §FR-010] — Sí: límites inclusivos y medición exactamente en el límite = cumplida (FR-010, edge case, contrato motor).
-- [x] CHK029 Are deletion edge cases defined for plans, criteria, inspections, non-conformities, and CAPA? [Edge Case, Spec §FR-026, §Edge Cases] — Sí: bloqueos y cascadas detallados para cada entidad (FR-026, edge cases, data-model §5).
+- [x] CHK029 Are deletion edge cases defined for plans, criteria, inspections, non-conformities, and CAPA? [Edge Case, Spec §FR-026, §FR-049, §Edge Cases] — Sí: bloqueos y cascadas detallados para cada entidad, incluida la eliminación directa de CAPA y la conservación de la entrada `delete` (FR-026/049, edge cases, data-model §5).
 - [x] CHK030 Are expired CAPA, invalid date ranges, and closed non-conformity cases addressed? [Edge Case, Spec §FR-019, §FR-023, §US6] — Sí: CAPA vencida sin cambio automático de estado, rango inválido rechazado y cierre de NC saca de cuarentena (FR-019/023/035, US6.5).
 - [x] CHK031 Is behavior defined for a plan with no criteria and for an inspection that cannot obtain a dictamen? [Edge Case, Spec §FR-002, §FR-013] — Sí: plan sin criterios no habilitable/no usable y inspección incompleta permanece `draft` sin dictamen (FR-002/013, edge cases).
 
@@ -73,7 +73,7 @@
 
 ## Traceability
 
-- [x] CHK040 Does every functional and non-functional requirement have at least one acceptance scenario or validation task mapped to it? [Traceability, Spec §FR-001–§FR-047, §SC-001–§SC-015, Tasks] — Sí: FR/SC mapeados a US1–US9, escenarios de aceptación y tareas/pruebas por flujo (spec, plan §12, tasks); FR-041–FR-047/SC-012–SC-015 tienen cobertura en US7–US9 y T065–T079.
+- [x] CHK040 Does every functional and non-functional requirement have at least one acceptance scenario or validation task mapped to it? [Traceability, Spec §FR-001–§FR-050, §SC-001–§SC-016, Tasks] — Sí: FR/SC mapeados a US1–US10, escenarios de aceptación y tareas/pruebas por flujo (spec, plan §12, tasks); FR-041–FR-047/SC-012–SC-015 tienen cobertura en US7–US9 y T065–T082, y FR-048–FR-050/SC-016 en US10 y T083–T093.
 
 ## Notes
 

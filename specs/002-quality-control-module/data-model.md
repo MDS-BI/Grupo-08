@@ -251,6 +251,27 @@ Define umbrales configurables sobre los indicadores del dashboard de calidad.
 
 **Rangos de umbral:** `approval_rate` y `capa_effectiveness` admiten 0–100; `open_non_conformances`, `overdue_capa` y `pending_inspections` admiten valores ≥ 0.
 
+### 3.9 `quality_audit_log`
+
+Bitácora inmutable de altas, ediciones, cambios de estado y eliminaciones sobre inspecciones, no conformidades y acciones CAPA.
+
+| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+|---|---|---|---|---|
+| `id` | STRING | PK | Autogenerado | Identificador de la entrada de auditoría. |
+| `entity_type` | VARCHAR | — | `inspection`, `non_conformance`, `corrective_action` | Tipo de entidad auditada. |
+| `entity_id` | STRING | — | Not Null | Identificador de la entidad, conservado tras la eliminación. |
+| `reference_module` | VARCHAR | — | Not Null | Módulo origen del lote. |
+| `reference_id` | STRING | — | Not Null | Documento origen; permite filtrar aunque la entidad ya no exista. |
+| `action` | VARCHAR | — | `create`, `update`, `status_change`, `delete` | Operación registrada. |
+| `changed_field` | VARCHAR | — | Not Null | Campo modificado. |
+| `before_value` | JSON | — | `null` en `create` | Valor anterior. |
+| `after_value` | JSON | — | `null` en `delete` | Valor nuevo. |
+| `actor` | STRING | — | Not Null | Empleado de la operación; en su defecto el rol activo como metadato. |
+| `timestamp` | TIMESTAMP | — | Not Null; ISO 8601 | Fecha y hora del cambio. |
+| `justification` | TEXT | — | Opcional | Motivo del cambio de dictamen cuando aplica. |
+
+**Regla de conservación:** las entradas `delete` persisten tras eliminaciones permitidas, incluida la eliminación directa de CAPA y las cascadas de FR-026. El cambio de dictamen emite una sola entrada `status_change` sobre `overall_result`, sin duplicarla como `update` genérico.
+
 ## 4. Integración con otros módulos
 
 | Dato de Control de Calidad | Módulo de destino | Propósito |

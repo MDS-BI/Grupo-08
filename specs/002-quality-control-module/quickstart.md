@@ -25,6 +25,7 @@
 14. En el **historial**, aplique filtros y use "Exportar CSV" para descargar las inspecciones filtradas con su columna `resultados`; en el **dashboard**, exporte el resumen de KPIs.
 15. Adjunte **evidencia** (PNG, JPG o PDF de hasta 5 MB por archivo y 8 MB acumulados) a una inspección o no conformidad desde su vista de detalle y confirme que se lista y descarga.
 16. Cree una **regla de alerta** sobre un KPI con operador, umbral y severidad, confirme que la alerta aparece cuando el valor incumple el umbral, y luego desactívela o elimínela para verificar que deja de mostrarse.
+17. Abra la **bitácora de auditoría**, filtre por lote, entidad y rango de fechas, y confirme que aparecen el alta de inspección, el cambio de dictamen con su justificación, el cierre de la NC, la CAPA en `completed` y las eliminaciones permitidas, sin duplicar el override.
 
 ## Validación
 
@@ -46,6 +47,9 @@
 - Verifique que la evidencia se elimina en cascada con su inspección sin no conformidad o con su no conformidad, y que el bloqueo de eliminación se mantiene cuando corresponde.
 - Verifique que una regla de alerta con indicador/operador/severidad no canónicos, umbral fuera de rango o duplicada se rechaza, y que al desactivarla o eliminarla deja de mostrarse.
 - Verifique que las alertas son informativas y no bloquean operaciones ni generan no conformidades.
+- Verifique que la bitácora registra altas, ediciones, cambios de estado y eliminaciones con actor ISO y lote persistido, y que las entradas `delete` sobreviven a eliminaciones directas y cascadas.
+- Verifique que el cambio de dictamen genera una sola entrada `status_change` con su justificación y no una `update` duplicada, y que un rango `desde > hasta` muestra el error sin modificar la vista.
+- Verifique que la consulta filtrada de la bitácora con hasta 500 inspecciones responde en menos de 2 segundos.
 - Verifique que la exportación de 500 inspecciones finaliza en menos de 2 segundos.
 - Verifique que las vistas muestran estados vacíos claros cuando no hay datos.
 

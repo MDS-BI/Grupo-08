@@ -42,3 +42,13 @@ Criterios de Aceptación:
 La interfaz debe incluir una vista o pestaña exclusiva de "Lotes en Cuarentena" mostrando ID de lote, nivel de criticidad y tipo de defecto detectado.
 Cada fila debe contar con un botón "Asignar CAPA" que abra un modal para ingresar la causa raíz, la acción a tomar (re-muestreo o reproceso) y la fecha límite.
 El sistema debe validar que los campos de la acción correctiva no queden vacíos y actualizar visualmente la etiqueta del lote a "Cuarentena - En Tratamiento" tras guardar.
+
+US-10: Bitácora de Auditoría de Cambios
+Historia de Usuario: Como gerente de operaciones o auditor, quiero consultar un registro de los cambios realizados sobre inspecciones, no conformidades y acciones correctivas (qué cambió, quién lo hizo, cuándo y por qué), para demostrar trazabilidad ante auditorías aunque el registro original ya no exista.
+Criterios de Aceptación:
+La interfaz debe renderizar una tabla de bitácora con las columnas: Entidad, ID de registro, Acción, Campo modificado (valor anterior y nuevo), Usuario y Fecha/Hora.
+Al cambiar el dictamen con justificación, la bitácora debe mostrar esa justificación, el usuario y la fecha, sin duplicar la entrada de auditoría ya existente.
+Al cerrar una no conformidad o fijar una acción CAPA en "completed", debe registrarse el cambio de estado y su marca temporal.
+Las eliminaciones permitidas deben conservar la entrada de auditoría aunque el registro ya no esté disponible en el sistema.
+La vista debe permitir filtrar por lote/origen, tipo de entidad y rango de fechas, incluir un botón de "Limpiar Filtros" y mostrar un estado vacío cuando no haya coincidencias; un rango inválido debe informarse y no aplicarse.
+Esta historia se detalla en `specs/002-quality-control-module/spec.md` (User Story 10); se numera US-10 para mantener correspondencia con la especificación vigente.

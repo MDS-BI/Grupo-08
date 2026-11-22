@@ -512,6 +512,21 @@ button.danger:hover { background: #fae3df; }
 .badge-treatment { border-color: #f3d9a4; color: #8a5a00; background: #fdf6e7; }
 .badge-conditional { border-color: #f3d9a4; color: #8a5a00; background: #fdf6e7; }
 
+.audit-badge {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.audit-badge-create { border-color: #b9dfc6; color: #17663a; background: #eefaf1; }
+.audit-badge-update { border-color: #c3d7f0; color: #1d4f91; background: #eef5fd; }
+.audit-badge-status_change { border-color: #f3d9a4; color: #8a5a00; background: #fdf6e7; }
+.audit-badge-delete { border-color: #f2c4bd; color: var(--danger); background: #fdf1ef; }
+#audit-log-body td { vertical-align: top; }
+
 .pareto-row {
   display: grid;
   grid-template-columns: minmax(120px, 220px) 1fr 90px;

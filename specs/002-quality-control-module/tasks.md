@@ -10,7 +10,7 @@
 ## Formato: `[ID] [P?] [Story] Descripción`
 
 - **[P]**: Puede ejecutarse en paralelo (archivos distintos, sin dependencia de tareas incompletas).
-- **[Story]**: Historia de usuario a la que pertenece la tarea (US1–US9).
+- **[Story]**: Historia de usuario a la que pertenece la tarea (US1–US10).
 - Cada descripción incluye la ruta de archivo exacta.
 
 ## Convenciones de rutas
@@ -27,8 +27,8 @@
 
 - [x] T001 Restaurar o implementar el código del módulo base ausente (`index.html`, `src/main.js`, `src/app.js`, `src/styles.css`, `src/components/shell.js`) desde `git restore --source=a0062c0^ -- index.html src` o según las especificaciones existentes.
 - [x] T002 [P] Crear `src/seed-data.js` con datos semilla de productos, empleados, recepciones, órdenes de producción y despachos.
-- [ ] T003 [P] Configurar lint, formato y análisis estático en `package.json` y archivos de configuración en la raíz del repositorio.
-- [ ] T004 [P] Configurar el entorno de pruebas Vitest con jsdom en `vitest.config.mjs` y `tests/setup/setup.js`.
+- [ ] T003 [P] Configurar lint, formato y análisis estático en `package.json` y archivos de configuración en la raíz del repositorio. (Superseded por T094).
+- [ ] T004 [P] Configurar el entorno de pruebas Vitest con jsdom en `vitest.config.mjs` y `tests/setup/setup.js`. (Superseded por T095).
 
 ---
 
@@ -92,10 +92,10 @@
 - [x] T024 [US2] Implementar en `src/components/inspection-engine.js` la permanencia en `draft` cuando falte una medición o el valor no sea numérico, y el rechazo de referencias huérfanas o no permitidas.
 - [x] T025 [US2] Persistir resultados de inspección en `src/storage.js` y retirar el lote de la vista de pendientes al completar la inspección.
 - [x] T026 [US2] Agregar en `src/components/pending-lots.js` y `src/components/inspection-engine.js` los estados vacíos y mensajes de validación correspondientes.
-- [ ] T056 [P] [US2] Escribir pruebas de integración de coincidencia de plan por producto y etapa derivada del origen, y de reanudación de borrador existente sin duplicado, en `tests/integration/inspection-flow.test.js` (FR-033, FR-036).
-- [ ] T057 [US2] Implementar en `src/components/inspection-engine.js` el filtrado de planes habilitados por `product_id` del documento origen y `applicable_stage` derivada de `reference_module` (`goods_receipt` → `incoming`, `production_order` → `in_process`, `shipment` → `final`) (FR-033).
-- [ ] T058 [US2] Implementar en `src/components/inspection-engine.js` la reanudación del borrador `draft` existente para el mismo `reference_module`, `reference_id` e `inspection_plan_id`, conservando sus mediciones y sin crear un duplicado; si existen varios, reanudar el más reciente y advertir la inconsistencia (FR-036).
-- [ ] T059 [US2] Implementar en `src/components/pending-lots.js` y `src/app.js` la preselección del documento origen al usar la acción "Inspeccionar" y la apertura de la vista de inspecciones con ese origen (FR-040).
+- [x] T056 [P] [US2] Escribir pruebas de integración de coincidencia de plan por producto y etapa derivada del origen, y de reanudación de borrador existente sin duplicado, en `tests/integration/inspection-flow.test.js` (FR-033, FR-036).
+- [x] T057 [US2] Implementar en `src/components/inspection-engine.js` el filtrado de planes habilitados por `product_id` del documento origen y `applicable_stage` derivada de `reference_module` (`goods_receipt` → `incoming`, `production_order` → `in_process`, `shipment` → `final`) (FR-033).
+- [x] T058 [US2] Implementar en `src/components/inspection-engine.js` la reanudación del borrador `draft` existente para el mismo `reference_module`, `reference_id` e `inspection_plan_id`, conservando sus mediciones y sin crear un duplicado; si existen varios, reanudar el más reciente y advertir la inconsistencia (FR-036).
+- [x] T059 [US2] Implementar en `src/components/pending-lots.js` y `src/app.js` la preselección del documento origen al usar la acción "Inspeccionar" y la apertura de la vista de inspecciones con ese origen (FR-040).
 
 **Checkpoint**: User Stories 1 y 2 funcionan de forma independiente.
 
@@ -119,8 +119,8 @@
 - [x] T031 [US3] Implementar en `src/components/non-conformance-capa.js` la marca visual de acciones CAPA vencidas sin cambiar automáticamente su estado.
 - [x] T032 [US3] Implementar en `src/storage.js` las reglas de integridad y trazabilidad: bloquear eliminación de inspección con no conformidad y eliminar CAPA en cascada al eliminar una no conformidad.
 - [x] T033 [US3] Agregar en `src/components/non-conformance-capa.js` los estados vacíos y mensajes de validación de no conformidad y CAPA.
-- [ ] T060 [P] [US3] Escribir prueba de integración que verifique que una acción CAPA registra `completed_at` al pasar a `completed` y que no lo registra en otros estados, en `tests/integration/non-conformance-capa.test.js` (FR-038).
-- [ ] T061 [US3] Implementar en `src/storage.js` y `src/components/non-conformance-capa.js` la marca temporal `completed_at` al fijar una acción CAPA en `completed`, conservándola al actualizar otros campos (FR-038).
+- [x] T060 [P] [US3] Escribir prueba de integración que verifique que una acción CAPA registra `completed_at` al pasar a `completed` y que no lo registra en otros estados, en `tests/integration/non-conformance-capa.test.js` (FR-038).
+- [x] T061 [US3] Implementar en `src/storage.js` y `src/components/non-conformance-capa.js` la marca temporal `completed_at` al fijar una acción CAPA en `completed`, conservándola al actualizar otros campos (FR-038).
 
 **Checkpoint**: La detección de fallas se convierte en no conformidad y acción CAPA trazable.
 
@@ -140,10 +140,10 @@
 
 - [x] T035 [US4] Implementar en `src/components/non-conformance-capa.js` la bandeja de revisión con las inspecciones `conditional` marcadas como pendientes del Jefe de Calidad.
 - [x] T036 [US4] Implementar en `src/components/non-conformance-capa.js` el cambio manual de dictamen con `override_justification`, `overridden_by` y `override_at`, bloqueando `passed` con criterios críticos fallidos o sin medición.
-- [x] T037 [US4] Implementar en `src/components/non-conformance-capa.js` el flujo de rechazo manual con confirmación y motivo obligatorio antes de guardar.
+- [x] T037 [US4] Implementar en `src/components/non-conformance-capa.js` el flujo de rechazo manual con confirmación y motivo obligatorio antes de guardar. (Superseded por T096).
 - [x] T038 [US4] Implementar en `src/components/non-conformance-capa.js` la pestaña de cuarentena con ID de lote, producto, severidad, tipo de defecto, acceso a CAPA y estado "Cuarentena - En tratamiento" cuando exista una acción.
 - [x] T039 [US4] Agregar en `src/components/non-conformance-capa.js` los estados vacíos de revisión condicional y cuarentena.
-- [ ] T062 [P] [US4] Escribir prueba de integración que confirme que el cambio manual de dictamen a `failed` no genera no conformidad y conserva la inspección en `completed`, en `tests/integration/review-quarantine.test.js` (FR-034).
+- [x] T062 [P] [US4] Escribir prueba de integración que confirme que el cambio manual de dictamen a `failed` no genera no conformidad y conserva la inspección en `completed`, en `tests/integration/review-quarantine.test.js` (FR-034).
 
 **Checkpoint**: Las desviaciones condicionales y los lotes retenidos se resuelven con evidencia registrada.
 
@@ -165,8 +165,8 @@
 - [x] T042 [US5] Implementar en `src/components/dashboard.js` el análisis de Pareto de productos y etapas con mayor concentración de no conformidades.
 - [x] T043 [US5] Implementar en `src/components/dashboard.js` las métricas agregadas por producto o etapa y restringir el detalle individual por inspector al rol de jefatura.
 - [x] T044 [US5] Agregar en `src/components/dashboard.js` estados vacíos claros cuando no existan datos.
-- [ ] T063 [P] [US5] Escribir prueba de integración del selector "Rol de uso" (`erp_quality:viewer_role`), su persistencia en `localStorage`, el re-render al cambiar y la restricción del detalle por inspector al rol `jefe_calidad`, en `tests/integration/quality-dashboard.test.js` (FR-028).
-- [ ] T064 [US5] Implementar en `src/components/dashboard.js` el selector "Rol de uso" (`jefe_calidad`, `inspector`, `gerente`), su persistencia en `localStorage` bajo `erp_quality:viewer_role` y el re-render del dashboard al cambiar, sin habilitar ni restringir otras acciones (FR-028).
+- [x] T063 [P] [US5] Escribir prueba de integración del selector "Rol de uso" (`erp_quality:viewer_role`), su persistencia en `localStorage`, el re-render al cambiar y la restricción del detalle por inspector al rol `jefe_calidad`, en `tests/integration/quality-dashboard.test.js` (FR-028).
+- [x] T064 [US5] Implementar en `src/components/dashboard.js` el selector "Rol de uso" (`jefe_calidad`, `inspector`, `gerente`), su persistencia en `localStorage` bajo `erp_quality:viewer_role` y el re-render del dashboard al cambiar, sin habilitar ni restringir otras acciones (FR-028).
 
 **Checkpoint**: El dashboard refleja fielmente los registros del módulo.
 
@@ -266,15 +266,60 @@
 **Propósito**: Mejoras que afectan a múltiples historias y cierre del módulo.
 
 - [x] T049 [P] Actualizar `README.md` con el flujo del módulo de calidad, datos semilla, enumeraciones canónicas y reglas de integridad.
-- [ ] T050 [P] Revisar accesibilidad y consistencia de UX en `src/styles.css` y `src/components/`: navegación por teclado, etiquetas, mensajes de error, confirmaciones y estados de carga.
+- [x] T050 [P] Revisar accesibilidad y consistencia de UX en `src/styles.css` y `src/components/`: navegación por teclado, etiquetas, mensajes de error, confirmaciones y estados de carga.
 - [x] T051 Validar rendimiento con hasta 500 inspecciones: consultas y dashboard en menos de 2 segundos, búsqueda filtrada en menos de 1 segundo percibido, según `quickstart.md`.
 - [x] T052 Escribir la prueba de integración del flujo completo lote pendiente → inspección → no conformidad → CAPA → historial en `tests/integration/full-flow.test.js`.
 - [x] T053 Ejecutar `npm test`, los comandos de lint/formato/análisis estático definidos en `package.json` y `npm run build`; corregir cualquier error bloqueante.
-- [ ] T054 Ejecutar la validación funcional de `specs/002-quality-control-module/quickstart.md` con `npm run dev`.
-- [ ] T055 Ejecutar `/speckit.analyze` sobre `specs/002-quality-control-module/spec.md` y confirmar que no quedan hallazgos críticos ni altos.
+- [x] T054 Ejecutar la validación funcional de `specs/002-quality-control-module/quickstart.md` con `npm run dev`.
+- [x] T055 Ejecutar `/speckit.analyze` sobre `specs/002-quality-control-module/spec.md` y confirmar que no quedan hallazgos críticos ni altos.
 - [x] T080 [P] Actualizar `data-model.md`, `contracts/quality-storage.md`, `quickstart.md` y `plan.md` con las entidades `quality_evidence` y `quality_alert_rules`, las vistas de exportación/evidencia/alertas y sus KPIs asociados.
 - [x] T081 [P] Ampliar `README.md` con exportación CSV (columna `resultados`), tipos y límites de evidencia (PNG/JPG/PDF, 5 MB por archivo, 8 MB acumulados y cuota) y configuración, desactivación y eliminación de reglas de alerta.
-- [ ] T082 Validar el rendimiento de exportación con hasta 500 inspecciones en menos de 2 segundos, según SC-012 y `quickstart.md`.
+- [x] T082 Validar el rendimiento de exportación con hasta 500 inspecciones en menos de 2 segundos, según SC-012 y `quickstart.md`.
+
+---
+
+## Fase 13: User Story 10 - Auditar cambios sobre registros de calidad (Priority: P10)
+
+**Goal**: Conservar y consultar una bitácora de altas, ediciones, cambios de estado y eliminaciones sobre inspecciones, no conformidades y acciones CAPA, con usuario, fecha, campo modificado y justificación.
+
+**Independent Test**: Generar una inspección desde un lote semilla, cambiar su dictamen con justificación, cerrar la NC correspondiente, fijar una CAPA en `completed` y verificar que la bitácora muestra esas acciones al filtrar por lote y rango de fechas, sin duplicar la entrada del override.
+
+**Datos**: `quality_audit_log` (nueva colección), `quality_inspections`, `non_conformances`, `corrective_actions`
+
+**Dependencias**: Foundational (Fase 2) y US2/US3/US4 para generar los registros auditados; US7 para reutilizar convenciones de exportación si se amplía la vista. No bloquea US1–US9.
+
+> Nota: `spec.md` y `plan.md` ya fueron sincronizados con US10 (FR-048–FR-050, SC-016, clarificaciones y §4–§6/§13–§14); T092 cubre la documentación de soporte restante.
+
+### Pruebas para User Story 10
+
+- [x] T083 [P] [US10] Escribir pruebas unitarias de validación y consulta de `quality_audit_log` (catálogos `inspection`/`non_conformance`/`corrective_action` y `create`/`update`/`status_change`/`delete`, campos obligatorios, marca temporal ISO y rechazo de entrada duplicada de override) en `tests/unit/quality-audit-log.test.js`.
+- [x] T084 [P] [US10] Escribir pruebas de integración del flujo completo de bitácora (alta de inspección, override con justificación, cierre de NC, CAPA en `completed`, eliminación permitida, filtros por lote/tipo/rango y rango inválido) en `tests/integration/quality-audit-log.test.js`.
+
+### Implementación para User Story 10
+
+- [x] T085 [US10] Extender `src/storage.js` con la colección `quality_audit_log` bajo la clave `erp_quality:quality_audit_log`, los catálogos `AUDIT_ENTITIES` (`inspection`, `non_conformance`, `corrective_action`) y `AUDIT_ACTIONS` (`create`, `update`, `status_change`, `delete`), y las funciones `appendAuditEntry`, `findAuditEntries` y `clearAuditEntries` (esta última solo para pruebas), validando campos obligatorios —incluidos `reference_module` + `reference_id`, `actor`, `changed_field` y `before_value`/`after_value` con semántica `null` de FR-049— y timestamp ISO.
+- [x] T086 [US10] Registrar entradas desde `addInspection`, `updateInspection`, `deleteInspection`, `addNonConformance`, `updateNonConformance`, `deleteNonConformance`, `addCorrectiveAction`, `updateCorrectiveAction` y `deleteCorrectiveAction` en `src/storage.js`, capturando lote (`reference_module` + `reference_id`), campo modificado con valor anterior/nuevo, actor (empleado de la operación: `inspector_id`, `overridden_by` o responsable CAPA; solo en su defecto el rol activo de `erp_quality:viewer_role` como metadato, sin habilitar acciones) y justificación; `overrideInspection` DEBE emitir una sola entrada `status_change` con su justificación, sin duplicar el `update` genérico.
+- [x] T087 [US10] Conservar la entrada `delete` tras las eliminaciones permitidas en `deleteInspection`, `deleteNonConformance` y `deleteCorrectiveAction` de `src/storage.js` (incluida la eliminación directa de CAPA y las cascadas al eliminar una NC), sin alterar las cascadas de resultados, evidencia y CAPA de FR-026.
+- [x] T088 [P] [US10] Crear en `src/components/quality-audit-log.js` la función pura `filterAuditEntries(entries, filters)` para filtrar por lote (`reference_module` + `reference_id`), `entity_type` y rango de fechas sobre `timestamp`, rechazando `desde > hasta` y exponiendo la limpieza de filtros.
+- [x] T089 [US10] Implementar en `src/components/quality-audit-log.js` la vista de bitácora con columnas Entidad, ID de registro, Acción, Campo modificado (anterior/nuevo), Usuario, Fecha/Hora y Justificación, incluyendo estado vacío y mensajes de validación visibles.
+- [x] T090 [US10] Registrar la vista `quality-audit-log` en `QUALITY_VIEWS` y `showQuality()` de `src/app.js`, añadir el botón `nav-quality-audit` en `index.html` y conectar el renderizado inicial desde `src/components/quality-audit-log.js`.
+- [x] T091 [P] [US10] Añadir en `src/styles.css` los estilos de la tabla de bitácora, los badges por acción y el estado vacío, reutilizando los tokens y patrones de `src/components/inspection-history.js`.
+- [x] T092 [P] [US10] Actualizar `specs/002-quality-control-module/data-model.md`, `specs/002-quality-control-module/contracts/quality-storage.md`, `specs/002-quality-control-module/quickstart.md` y `README.md` con la colección `quality_audit_log`, sus catálogos, la regla de conservación tras eliminación y el paso de validación de la bitácora.
+- [x] T093 [US10] Ejecutar `npm test` y `npm run build` y validar el flujo independiente con los datos semilla de `src/seed-data.js` (lote → inspección → NC → CAPA → bitácora filtrada), comprobando que no aparecen referencias huérfanas ni entradas duplicadas y verificando SC-016 (consulta filtrada en menos de 2 segundos con hasta 500 inspecciones).
+
+**Checkpoint**: US10 queda implementada y verificable de forma independiente; las entradas permanecen tras eliminaciones permitidas y la bitácora respeta los filtros y el rango de fechas.
+
+### Ejemplo de paralelización para User Story 10
+
+```bash
+# Pruebas en archivos distintos, sin depender de la implementación:
+Task: "Escribir pruebas unitarias en tests/unit/quality-audit-log.test.js"
+Task: "Escribir pruebas de integración en tests/integration/quality-audit-log.test.js"
+
+# En paralelo, el filtro puro y los estilos:
+Task: "Crear filterAuditEntries en src/components/quality-audit-log.js"
+Task: "Añadir estilos de bitácora en src/styles.css"
+```
 
 ---
 
@@ -284,8 +329,8 @@
 
 - **Setup (Fase 1)**: Sin dependencias; puede iniciar de inmediato. T001 bloquea todo el desarrollo.
 - **Foundational (Fase 2)**: Depende de Setup. T005–T008 bloquean todas las historias de usuario.
-- **Historias de Usuario (Fases 3–11)**: Dependen de Foundational.
-- **Polish (Fase 12)**: Depende de que las historias deseadas estén completas.
+- **Historias de Usuario (Fases 3–11 y Fase 13: US10)**: Dependen de Foundational.
+- **Polish (Fase 12)**: Depende de que las historias deseadas estén completas; US10 (Fase 13) puede ejecutarse antes o después de Polish.
 
 ### Dependencias entre historias
 
@@ -298,6 +343,7 @@
 - **US7 (P7)**: Depende de US2 y US6 para exportar inspecciones, resultados e historial filtrado.
 - **US8 (P8)**: Depende de US2 y US3 para adjuntar evidencia a inspecciones y no conformidades.
 - **US9 (P9)**: Depende de US5 para evaluar reglas de alerta contra los KPIs del dashboard.
+- **US10 (P10)**: Depende de US2–US4 para generar registros auditados y de US7 para reutilizar convenciones de exportación; no bloquea US1–US9.
 - **Cobertura adicional (T056–T064)**: cierran brechas detectadas en el análisis dentro de su historia (US2: FR-033/FR-036/FR-040; US3: FR-038; US4: FR-034; US5: FR-028); cada tarea de prueba precede a su implementación.
 
 ### Dentro de cada historia
@@ -316,7 +362,7 @@
 - T049 y T050 pueden ejecutarse en paralelo al cierre.
 - T056, T060, T062 y T063 pueden escribirse en paralelo (archivos de prueba distintos) antes de sus tareas de implementación asociadas.
 - T065, T069 y T075 pueden escribirse en paralelo (archivos de prueba distintos).
-- US7, US8 y US9 pueden abordarse en paralelo una vez que US2–US6 generen datos y KPIs; T080 y T081 pueden ejecutarse en paralelo al cierre.
+- US7, US8, US9 y US10 pueden abordarse en paralelo una vez que US2–US6 generen datos y KPIs; T080 y T081 pueden ejecutarse en paralelo al cierre; en US10, T083/T084 y T088/T091/T092 son paralelizables.
 
 ---
 
@@ -393,8 +439,8 @@ Task: "Implementar tabla y filtros del historial en src/components/inspection-hi
 
 Correcciones derivadas del feedback Avance 03 (16/11/26), arreglos A1–A4 y A8 del Equipo A. El estado se verificó contra el código y las pruebas presentes en `src/` y `tests/`.
 
-- [ ] T056 [A1] Configurar los scripts de lint, formato y análisis estático en `package.json` para que T053 sea ejecutable (T003 continúa sin marcar en `package.json`).
-- [ ] T057 [A2] Crear `tests/setup/setup.js` y registrarlo en `vitest.config.mjs` para completar el entorno de pruebas (T004 continúa sin marcar y el archivo no existe en `tests/`).
-- [ ] T058 [A3] Implementar el flujo de rechazo manual con confirmación y motivo obligatorio en `src/components/non-conformance-capa.js`, con su escenario en `tests/integration/review-quarantine.test.js`; actualmente solo existe el cambio de dictamen con `override_justification`.
-- [x] T059 [A4] Mantener y probar el filtro "Módulo origen" en el historial: `currentFilters`, `filterInspections` y `clearHistoryFilters` en `src/components/inspection-history.js`, cubierto por `tests/integration/inspection-history.test.js`.
-- [x] T060 [A8] Mejoras funcionales y de interfaz solicitadas: datos simulados en `src/seed-data.js`, estilos, transiciones y navegación en `src/styles.css`, `src/app.js` y `src/components/shell.js`, con cobertura en `tests/integration/workspace-shell.test.js`, `tests/integration/relabeling.test.js` y `tests/integration/search-entities.test.js`.
+- [x] T094 [A1] Configurar los scripts de lint, formato y análisis estático en `package.json` para que T053 sea ejecutable (T003 continúa sin marcar en `package.json`).
+- [x] T095 [A2] Crear `tests/setup/setup.js` y registrarlo en `vitest.config.mjs` para completar el entorno de pruebas (T004 continúa sin marcar y el archivo no existe en `tests/`).
+- [x] T096 [A3] Implementar el flujo de rechazo manual con confirmación y motivo obligatorio en `src/components/non-conformance-capa.js`, con su escenario en `tests/integration/review-quarantine.test.js`; actualmente solo existe el cambio de dictamen con `override_justification`.
+- [x] T097 [A4] Mantener y probar el filtro "Módulo origen" en el historial: `currentFilters`, `filterInspections` y `clearHistoryFilters` en `src/components/inspection-history.js`, cubierto por `tests/integration/inspection-history.test.js`.
+- [x] T098 [A8] Mejoras funcionales y de interfaz solicitadas: datos simulados en `src/seed-data.js`, estilos, transiciones y navegación en `src/styles.css`, `src/app.js` y `src/components/shell.js`, con cobertura en `tests/integration/workspace-shell.test.js`, `tests/integration/relabeling.test.js` y `tests/integration/search-entities.test.js`.

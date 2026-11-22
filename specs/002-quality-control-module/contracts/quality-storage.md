@@ -16,6 +16,7 @@ Cada colección se persiste como una lista bajo su propia clave:
 - `corrective_actions`
 - `quality_evidence`
 - `quality_alert_rules`
+- `quality_audit_log` (clave `erp_quality:quality_audit_log`)
 
 ## Formas de los Datos
 
@@ -119,6 +120,20 @@ Cada colección se persiste como una lista bajo su propia clave:
 - `is_active`: booleano; por defecto `true`; `false` desactiva la regla sin eliminarla.
 - `createdAt` / `updatedAt`: marcas de tiempo ISO.
 
+### Entrada de bitácora de auditoría
+
+- `id`: cadena única, generada automáticamente.
+- `entity_type`: `inspection` | `non_conformance` | `corrective_action`.
+- `entity_id`: cadena no vacía del registro auditado; se conserva aunque la entidad se elimine.
+- `reference_module` / `reference_id`: par que identifica el lote origen y sobrevive a eliminaciones.
+- `action`: `create` | `update` | `status_change` | `delete`.
+- `changed_field`: cadena no vacía con el campo modificado.
+- `before_value`: valor anterior; `null` en `create`.
+- `after_value`: valor nuevo; `null` en `delete`.
+- `actor`: empleado de la operación; si no se expone, el rol activo de `erp_quality:viewer_role` como metadato.
+- `timestamp`: marca de tiempo ISO válida.
+- `justification`: cadena opcional con el motivo del cambio de dictamen.
+
 ## Operaciones
 
 - `loadCollection(name)`: devuelve la lista persistida de la colección.
@@ -130,12 +145,18 @@ Cada colección se persiste como una lista bajo su propia clave:
 - `derivePendingLots(externalDocuments, inspections)`: devuelve los documentos origen sin inspección `completed`.
 - `deriveQuarantineLots(nonConformances, correctiveActions)`: devuelve los lotes con no conformidad `open`/`under_review` y el estado de tratamiento CAPA.
 - `deriveAlerts(kpis, alertRules)`: devuelve las reglas activas cuyo umbral se incumple con los KPIs calculados.
+- `AUDIT_ENTITIES` / `AUDIT_ACTIONS`: catálogos de tipos de entidad y acciones de la bitácora.
+- `appendAuditEntry(entry)`: valida y persiste una entrada; ignora duplicados exactos de `status_change`.
+- `findAuditEntries(filters)`: consulta por lote, `entity_type`, `action` y rango `desde`/`hasta` sobre `timestamp`.
+- `clearAuditEntries()`: vacía la bitácora; solo para pruebas.
 
 ## Expectativas de Validación
 
 - Un plan sin `product_id` existente, `plan_name`, etapa canónica o al menos un criterio debe rechazarse o no habilitarse para inspecciones.
 - Un criterio con `expected_value`, `tolerance`, `unit` o `comparison_type` inválidos debe rechazarse.
 - Una inspección con `reference_module` no canónico o `reference_id` inexistente debe rechazarse antes de persistir.
+- Una entrada de bitácora sin actor, lote, campo modificado, valores anterior/nuevo o marca temporal ISO debe rechazarse.
+- Las entradas `delete` y las de cascadas de FR-026 deben conservarse; un override solo genera una entrada `status_change`, sin `update` duplicado.
 - `pass_fail` y `overall_result` deben ser derivados y no aceptarse como entrada directa.
 - Una inspección no puede pasar a `completed` si falta la medición de cualquier criterio o algún valor no es numérico; permanece `draft`.
 - Una inspección con criterios críticos fallidos o sin medición no puede guardarse como `passed`, incluso con justificación. Los cambios de dictamen permitidos registran `override_justification`, `overridden_by` y `override_at`.

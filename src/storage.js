@@ -174,7 +174,7 @@ export function deleteEntity(id){
 }
 
 export function validateDocument(payload, currentStatus){
-  const {entityId, series, folio, startDate, endDate, quantity, subtotal, discount, taxAmount, totalAmount, status} = payload;
+  const {entityId, folio, startDate, endDate, quantity, subtotal, discount, status} = payload;
   const errors = {};
   const entities = loadEntities();
   if(!entityId || !entities.some(e => e.entity_id === entityId)){
@@ -340,6 +340,9 @@ export const ALERT_METRICS = Object.freeze([
 ]);
 export const ALERT_OPERATORS = Object.freeze(['lt', 'lte', 'gt', 'gte', 'eq']);
 export const ALERT_SEVERITIES = Object.freeze(['info', 'warning', 'critical']);
+export const AUDIT_ENTITIES = Object.freeze(['inspection', 'non_conformance', 'corrective_action']);
+export const AUDIT_ACTIONS = Object.freeze(['create', 'update', 'status_change', 'delete']);
+const AUDIT_ROLE_KEY = 'erp_quality:viewer_role';
 const ALERT_RATE_METRICS = Object.freeze(['approval_rate', 'capa_effectiveness']);
 
 const QUALITY_COLLECTION_KEYS = Object.freeze({
@@ -350,7 +353,8 @@ const QUALITY_COLLECTION_KEYS = Object.freeze({
   non_conformances: 'erp_quality:non_conformances',
   corrective_actions: 'erp_quality:corrective_actions',
   quality_evidence: 'erp_quality:quality_evidence',
-  quality_alert_rules: 'erp_quality:quality_alert_rules'
+  quality_alert_rules: 'erp_quality:quality_alert_rules',
+  quality_audit_log: 'erp_quality:quality_audit_log'
 });
 
 const EXTERNAL_COLLECTION_KEYS = Object.freeze({
@@ -431,6 +435,157 @@ export function deleteRelated(name, foreignKey, id){
   const next = list.filter(r => r[foreignKey] !== id);
   saveCollection(name, next);
   return next;
+}
+
+// ----------------------------------------------------------------------------
+// Bitácora de auditoría (US10)
+// ----------------------------------------------------------------------------
+
+function isValidIsoTimestamp(value){
+  return typeof value === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(value)
+    && !Number.isNaN(Date.parse(value));
+}
+
+function validateAuditEntry(entry){
+  const errors = {};
+  if(!AUDIT_ENTITIES.includes(entry && entry.entity_type)) errors.entity_type = 'Tipo de entidad de auditoría inválido';
+  if(!AUDIT_ACTIONS.includes(entry && entry.action)) errors.action = 'Acción de auditoría inválida';
+  if(isBlank(entry && entry.entity_id)) errors.entity_id = 'El ID de la entidad es obligatorio';
+  if(isBlank(entry && entry.reference_module)) errors.reference_module = 'El módulo de origen es obligatorio';
+  if(isBlank(entry && entry.reference_id)) errors.reference_id = 'El documento origen es obligatorio';
+  if(isBlank(entry && entry.changed_field)) errors.changed_field = 'El campo modificado es obligatorio';
+  if(!entry || !Object.prototype.hasOwnProperty.call(entry, 'before_value') || entry.before_value === undefined) errors.before_value = 'El valor anterior es obligatorio';
+  if(!entry || !Object.prototype.hasOwnProperty.call(entry, 'after_value') || entry.after_value === undefined) errors.after_value = 'El valor nuevo es obligatorio';
+  if(isBlank(entry && entry.actor)) errors.actor = 'El actor de la auditoría es obligatorio';
+  if(!isValidIsoTimestamp(entry && entry.timestamp)) errors.timestamp = 'La marca temporal debe ser ISO válida';
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
+function isDuplicateAuditEntry(entry, list){
+  return list.some(existing => existing.entity_type === entry.entity_type
+    && existing.entity_id === entry.entity_id
+    && existing.action === entry.action
+    && existing.changed_field === entry.changed_field
+    && existing.timestamp === entry.timestamp
+    && JSON.stringify(existing.after_value) === JSON.stringify(entry.after_value));
+}
+
+export function appendAuditEntry(entry){
+  const check = validateAuditEntry(entry);
+  if(!check.valid) throw new Error(Object.values(check.errors)[0]);
+  const list = loadCollection('quality_audit_log');
+  const duplicate = isDuplicateAuditEntry(entry, list);
+  if(duplicate) return duplicate;
+  const stored = { id: generateId(), ...entry };
+  list.push(stored);
+  saveCollection('quality_audit_log', list);
+  return stored;
+}
+
+function auditRangeBoundary(value, isEnd){
+  if(!value) return '';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(value)) return isEnd ? `${value}T23:59:59.999Z` : `${value}T00:00:00.000Z`;
+  return value;
+}
+
+export function findAuditEntries(filters = {}){
+  const desde = auditRangeBoundary(filters.desde, false);
+  const hasta = auditRangeBoundary(filters.hasta, true);
+  return loadCollection('quality_audit_log').filter(entry => {
+    if(filters.reference_module && entry.reference_module !== filters.reference_module) return false;
+    if(filters.reference_id && entry.reference_id !== filters.reference_id) return false;
+    if(filters.entity_type && entry.entity_type !== filters.entity_type) return false;
+    if(filters.action && entry.action !== filters.action) return false;
+    if(desde && entry.timestamp < desde) return false;
+    if(hasta && entry.timestamp > hasta) return false;
+    return true;
+  });
+}
+
+export function clearAuditEntries(){
+  saveCollection('quality_audit_log', []);
+}
+
+function auditActor(candidate){
+  if(!isBlank(candidate)) return String(candidate).trim();
+  try{
+    const role = localStorage.getItem(AUDIT_ROLE_KEY);
+    if(!isBlank(role)) return String(role).trim();
+  }catch(e){
+    console.error('No se pudo leer el rol de auditoría', e);
+  }
+  return 'sistema';
+}
+
+function auditLotReference(entityType, record){
+  if(!record) return { reference_module: 'desconocido', reference_id: 'desconocido' };
+  if(record.reference_module && record.reference_id){
+    return { reference_module: record.reference_module, reference_id: record.reference_id };
+  }
+  if(entityType === 'non_conformance' && record.inspection_id){
+    const inspection = loadCollection('quality_inspections').find(i => i.inspection_id === record.inspection_id);
+    if(inspection) return { reference_module: inspection.reference_module, reference_id: inspection.reference_id };
+  }
+  if(entityType === 'corrective_action' && record.non_conformance_id){
+    const nc = loadCollection('non_conformances').find(n => n.non_conformance_id === record.non_conformance_id);
+    if(nc){
+      if(nc.reference_module && nc.reference_id) return { reference_module: nc.reference_module, reference_id: nc.reference_id };
+      if(nc.inspection_id){
+        const inspection = loadCollection('quality_inspections').find(i => i.inspection_id === nc.inspection_id);
+        if(inspection) return { reference_module: inspection.reference_module, reference_id: inspection.reference_id };
+      }
+    }
+  }
+  return {
+    reference_module: record.reference_module || 'desconocido',
+    reference_id: record.reference_id || record.inspection_id || record.non_conformance_id || record.corrective_action_id || record.id || 'desconocido'
+  };
+}
+
+function recordAudit({ entityType, entityId, record, action, changedField, beforeValue, afterValue, actor, justification, timestamp }){
+  const reference = auditLotReference(entityType, record);
+  return appendAuditEntry({
+    entity_type: entityType,
+    entity_id: entityId,
+    reference_module: reference.reference_module,
+    reference_id: reference.reference_id,
+    action,
+    changed_field: changedField,
+    before_value: beforeValue === undefined || beforeValue === null ? null : beforeValue,
+    after_value: afterValue === undefined || afterValue === null ? null : afterValue,
+    actor: auditActor(actor),
+    timestamp: timestamp || new Date().toISOString(),
+    ...(isBlank(justification) ? {} : { justification: String(justification).trim() })
+  });
+}
+
+const AUDIT_IGNORED_FIELDS = Object.freeze([
+  'id', 'createdAt', 'updatedAt', 'reference_module', 'reference_id',
+  'completed_at', 'override_justification', 'overridden_by', 'override_at'
+]);
+
+function changedFields(previous, next){
+  return Object.keys(next).filter(field => !AUDIT_IGNORED_FIELDS.includes(field)
+    && JSON.stringify(previous[field]) !== JSON.stringify(next[field]));
+}
+
+function recordUpdateAudit({ entityType, entityId, previous, next, actor, justification, statusField = 'status' }){
+  const fields = changedFields(previous, next);
+  fields.forEach(field => {
+    const isStatus = field === statusField;
+    recordAudit({
+      entityType,
+      entityId,
+      record: next,
+      action: isStatus ? 'status_change' : 'update',
+      changedField: field,
+      beforeValue: previous[field],
+      afterValue: next[field],
+      actor,
+      justification: isStatus ? justification : undefined
+    });
+  });
 }
 
 function isQuotaError(error){
@@ -531,7 +686,7 @@ export function addEvidence(payload){
     saveCollection('quality_evidence', list);
   }catch(error){
     if(isQuotaError(error)){
-      throw new Error('No hay espacio suficiente para guardar la evidencia. La evidencia anterior se conserva.');
+      throw new Error('No hay espacio suficiente para guardar la evidencia. La evidencia anterior se conserva.', { cause: error });
     }
     throw error;
   }
@@ -1020,16 +1175,52 @@ export function addInspection(payload){
   const list = loadCollection('quality_inspections');
   list.push(inspection);
   saveCollection('quality_inspections', list);
+  recordAudit({
+    entityType: 'inspection',
+    entityId: inspection.inspection_id,
+    record: inspection,
+    action: 'create',
+    changedField: 'inspection_status',
+    beforeValue: null,
+    afterValue: inspection.inspection_status,
+    actor: inspection.inspector_id
+  });
   return inspection;
 }
 
-export function updateInspection(id, updates){
+export function updateInspection(id, updates, options = {}){
   const list = loadCollection('quality_inspections');
   const idx = list.findIndex(i => i.id === id || i.inspection_id === id);
   if(idx === -1) throw new Error('Inspección no encontrada');
-  const merged = { ...list[idx], ...updates };
-  list[idx] = { ...list[idx], ...updates, id: list[idx].id, updatedAt: new Date().toISOString() };
+  const previous = list[idx];
+  list[idx] = { ...previous, ...updates, id: previous.id, updatedAt: new Date().toISOString() };
   saveCollection('quality_inspections', list);
+  if(options.audit !== false){
+    const actor = options.actor || updates.overridden_by || updates.inspector_id || previous.inspector_id;
+    if(options.auditMode === 'override'){
+      recordAudit({
+        entityType: 'inspection',
+        entityId: previous.inspection_id,
+        record: previous,
+        action: 'status_change',
+        changedField: 'overall_result',
+        beforeValue: previous.overall_result,
+        afterValue: list[idx].overall_result,
+        actor,
+        justification: options.justification
+      });
+    }else{
+      recordUpdateAudit({
+        entityType: 'inspection',
+        entityId: previous.inspection_id,
+        previous,
+        next: list[idx],
+        actor,
+        justification: options.justification,
+        statusField: 'inspection_status'
+      });
+    }
+  }
   return list[idx];
 }
 
@@ -1042,6 +1233,16 @@ export function deleteInspection(id){
   saveCollection('quality_inspections', list.filter(i => i.id !== inspection.id));
   deleteRelated('quality_inspection_results', 'inspection_id', inspection.inspection_id);
   deleteEvidenceFor('inspection', inspection.inspection_id);
+  recordAudit({
+    entityType: 'inspection',
+    entityId: inspection.inspection_id,
+    record: inspection,
+    action: 'delete',
+    changedField: 'inspection_status',
+    beforeValue: inspection.inspection_status,
+    afterValue: null,
+    actor: inspection.inspector_id
+  });
   return true;
 }
 
@@ -1097,11 +1298,17 @@ export function addNonConformance(payload){
   const check = validateNonConformance(payload);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const now = new Date().toISOString();
+  const inspection = payload.inspection_id
+    ? loadCollection('quality_inspections').find(i => i.inspection_id === payload.inspection_id)
+    : null;
+  const lot = auditLotReference('non_conformance', payload);
   const nc = {
     id: generateId(),
     non_conformance_id: generateId(),
     inspection_id: payload.inspection_id,
     product_id: payload.product_id,
+    reference_module: lot.reference_module,
+    reference_id: lot.reference_id,
     description: String(payload.description).trim(),
     defect_type: payload.defect_type,
     severity: payload.severity,
@@ -1112,6 +1319,16 @@ export function addNonConformance(payload){
   const list = loadCollection('non_conformances');
   list.push(nc);
   saveCollection('non_conformances', list);
+  recordAudit({
+    entityType: 'non_conformance',
+    entityId: nc.non_conformance_id,
+    record: nc,
+    action: 'create',
+    changedField: 'status',
+    beforeValue: null,
+    afterValue: nc.status,
+    actor: inspection ? inspection.inspector_id : undefined
+  });
   return nc;
 }
 
@@ -1119,11 +1336,12 @@ export function updateNonConformance(id, updates){
   const list = loadCollection('non_conformances');
   const idx = list.findIndex(nc => nc.id === id || nc.non_conformance_id === id);
   if(idx === -1) throw new Error('No conformidad no encontrada');
-  const merged = { ...list[idx], ...updates };
+  const previous = list[idx];
+  const merged = { ...previous, ...updates };
   const check = validateNonConformance(merged);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   list[idx] = {
-    ...list[idx],
+    ...previous,
     description: String(merged.description).trim(),
     defect_type: merged.defect_type,
     severity: merged.severity,
@@ -1131,6 +1349,17 @@ export function updateNonConformance(id, updates){
     updatedAt: new Date().toISOString()
   };
   saveCollection('non_conformances', list);
+  const inspection = list[idx].inspection_id
+    ? loadCollection('quality_inspections').find(i => i.inspection_id === list[idx].inspection_id)
+    : null;
+  recordUpdateAudit({
+    entityType: 'non_conformance',
+    entityId: list[idx].non_conformance_id,
+    previous,
+    next: list[idx],
+    actor: inspection ? inspection.inspector_id : undefined,
+    justification: updates.justification
+  });
   return list[idx];
 }
 
@@ -1138,9 +1367,34 @@ export function deleteNonConformance(id){
   const list = loadCollection('non_conformances');
   const nc = list.find(n => n.id === id || n.non_conformance_id === id);
   if(!nc) throw new Error('No conformidad no encontrada');
+  const cascadedActions = loadCollection('corrective_actions')
+    .filter(a => a.non_conformance_id === nc.non_conformance_id);
+  const inspection = nc.inspection_id
+    ? loadCollection('quality_inspections').find(i => i.inspection_id === nc.inspection_id)
+    : null;
   saveCollection('non_conformances', list.filter(n => n.id !== nc.id));
   deleteRelated('corrective_actions', 'non_conformance_id', nc.non_conformance_id);
   deleteEvidenceFor('non_conformance', nc.non_conformance_id);
+  recordAudit({
+    entityType: 'non_conformance',
+    entityId: nc.non_conformance_id,
+    record: nc,
+    action: 'delete',
+    changedField: 'status',
+    beforeValue: nc.status,
+    afterValue: null,
+    actor: inspection ? inspection.inspector_id : undefined
+  });
+  cascadedActions.forEach(action => recordAudit({
+    entityType: 'corrective_action',
+    entityId: action.corrective_action_id,
+    record: nc,
+    action: 'delete',
+    changedField: 'status',
+    beforeValue: action.status,
+    afterValue: null,
+    actor: action.responsible_employee_id
+  }));
   return true;
 }
 
@@ -1188,10 +1442,13 @@ export function addCorrectiveAction(payload){
   const check = validateCorrectiveAction(payload);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const now = new Date().toISOString();
+  const lot = auditLotReference('corrective_action', payload);
   const action = {
     id: generateId(),
     corrective_action_id: generateId(),
     non_conformance_id: payload.non_conformance_id,
+    reference_module: lot.reference_module,
+    reference_id: lot.reference_id,
     responsible_employee_id: payload.responsible_employee_id,
     action_description: String(payload.action_description).trim(),
     root_cause: String(payload.root_cause).trim(),
@@ -1205,6 +1462,16 @@ export function addCorrectiveAction(payload){
   const list = loadCollection('corrective_actions');
   list.push(action);
   saveCollection('corrective_actions', list);
+  recordAudit({
+    entityType: 'corrective_action',
+    entityId: action.corrective_action_id,
+    record: action,
+    action: 'create',
+    changedField: 'status',
+    beforeValue: null,
+    afterValue: action.status,
+    actor: action.responsible_employee_id
+  });
   return action;
 }
 
@@ -1212,23 +1479,32 @@ export function updateCorrectiveAction(id, updates){
   const list = loadCollection('corrective_actions');
   const idx = list.findIndex(a => a.id === id || a.corrective_action_id === id);
   if(idx === -1) throw new Error('Acción CAPA no encontrada');
-  const merged = { ...list[idx], ...updates };
+  const previous = list[idx];
+  const merged = { ...previous, ...updates };
   const check = validateCorrectiveAction(merged);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const now = new Date().toISOString();
-  const completing = merged.status === 'completed' && list[idx].status !== 'completed';
+  const completing = merged.status === 'completed' && previous.status !== 'completed';
   list[idx] = {
-    ...list[idx],
+    ...previous,
     responsible_employee_id: merged.responsible_employee_id,
     action_description: String(merged.action_description).trim(),
     root_cause: String(merged.root_cause).trim(),
     action_type: merged.action_type,
     due_date: merged.due_date,
     status: merged.status,
-    completed_at: completing ? now : list[idx].completed_at,
+    completed_at: completing ? now : previous.completed_at,
     updatedAt: now
   };
   saveCollection('corrective_actions', list);
+  recordUpdateAudit({
+    entityType: 'corrective_action',
+    entityId: list[idx].corrective_action_id,
+    previous,
+    next: list[idx],
+    actor: updates.responsible_employee_id || list[idx].responsible_employee_id,
+    justification: updates.justification
+  });
   return list[idx];
 }
 
@@ -1238,6 +1514,16 @@ export function deleteCorrectiveAction(id){
   if(!action) throw new Error('Acción CAPA no encontrada');
   const next = list.filter(a => a.id !== action.id);
   saveCollection('corrective_actions', next);
+  recordAudit({
+    entityType: 'corrective_action',
+    entityId: action.corrective_action_id,
+    record: action,
+    action: 'delete',
+    changedField: 'status',
+    beforeValue: action.status,
+    afterValue: null,
+    actor: action.responsible_employee_id
+  });
   return true;
 }
 
@@ -1282,6 +1568,10 @@ export function overrideInspection(inspectionId, targetResult, justification, ov
     override_justification: String(justification).trim(),
     overridden_by: String(overriddenBy).trim(),
     override_at: new Date().toISOString()
+  }, {
+    auditMode: 'override',
+    justification,
+    actor: overriddenBy
   });
 }
 

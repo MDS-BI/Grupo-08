@@ -126,12 +126,26 @@ describe('User Story 5 - quality dashboard', () => {
       is_critical: true
     });
     runInspection('gr-001', 'passed');
+    localStorage.setItem('erp_quality:viewer_role', 'gerente');
 
     qs('nav-quality-dashboard').click();
+    expect(qs('quality-role').value).toBe('gerente');
     qs('quality-role').value = 'inspector';
     qs('quality-role').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
 
     expect(qs('quality-inspector-detail').textContent).toContain('restringido');
     expect(qs('kpi-approval-rate').textContent).toBe('100%');
+    expect(localStorage.getItem('erp_quality:viewer_role')).toBe('inspector');
+
+    qs('quality-role').value = 'gerente';
+    qs('quality-role').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    expect(localStorage.getItem('erp_quality:viewer_role')).toBe('gerente');
+    expect(qs('quality-inspector-detail').textContent).toContain('restringido');
+
+    qs('quality-role').value = 'jefe_calidad';
+    qs('quality-role').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    expect(localStorage.getItem('erp_quality:viewer_role')).toBe('jefe_calidad');
+    expect(qs('quality-inspector-detail').textContent).toContain('Ana Torres');
+    expect(qs('quality-role').value).toBe('jefe_calidad');
   });
 });

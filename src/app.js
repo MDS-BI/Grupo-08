@@ -12,6 +12,7 @@ import { renderPlanConfig, initPlanConfig, clearPlanForm, clearCriterionForm } f
 import { renderInspectionView, initInspectionEngine, startInspection, resetInspectionForm } from './components/inspection-engine.js';
 import { renderNonConformance, initNonConformanceCapa, clearNcForm, clearCapaForm } from './components/non-conformance-capa.js';
 import { renderHistory, initInspectionHistory } from './components/inspection-history.js';
+import { renderAuditLog, initAuditLog } from './components/quality-audit-log.js';
 
 function qs(id){ return document.getElementById(id); }
 
@@ -38,7 +39,8 @@ const QUALITY_VIEWS = {
   'quality-plans': 'view-quality-plans',
   inspections: 'view-inspections',
   'non-conformance': 'view-non-conformance',
-  'quality-history': 'view-quality-history'
+  'quality-history': 'view-quality-history',
+  'quality-audit-log': 'view-quality-audit-log'
 };
 
 let wired = false;
@@ -73,11 +75,12 @@ function showQuality(name, opts = {}){
   if(name === 'pending-lots') renderPendingLots();
   if(name === 'quality-plans') renderPlanConfig();
   if(name === 'inspections'){
-    renderInspectionView();
     if(opts.referenceModule && opts.referenceId) startInspection(opts.referenceModule, opts.referenceId);
+    else renderInspectionView();
   }
   if(name === 'non-conformance') renderNonConformance();
   if(name === 'quality-history') renderHistory();
+  if(name === 'quality-audit-log') renderAuditLog();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -330,6 +333,7 @@ function wireEvents(){
   initInspectionEngine();
   initNonConformanceCapa();
   initInspectionHistory();
+  initAuditLog();
 }
 
 export function initApp(resolved){

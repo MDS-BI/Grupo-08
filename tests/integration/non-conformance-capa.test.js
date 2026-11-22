@@ -6,6 +6,7 @@ import {
   addInspection,
   completeInspection,
   addCorrectiveAction,
+  updateCorrectiveAction,
   loadCollection
 } from '../../src/storage.js';
 import { bootQualityApp, qs, submit } from '../support/quality-dom.js';
@@ -114,6 +115,27 @@ describe('User Story 3 - non-conformances and CAPA', () => {
     qs('nav-quality-nc').click();
     expect(qs('capa-list').textContent).toContain('Vencida');
     expect(loadCollection('corrective_actions')[0].status).toBe('pending');
+  });
+
+  it('stamps completed_at only on completion and preserves it on later edits', () => {
+    createFailedInspection();
+    qs('nav-quality-nc').click();
+    const nc = loadCollection('non_conformances')[0];
+
+    fillCapa(nc);
+    submit(dom.window, 'capa-form');
+    let action = loadCollection('corrective_actions')[0];
+    expect(action.completed_at).toBeUndefined();
+
+    updateCorrectiveAction(action.corrective_action_id, { status: 'completed' });
+    action = loadCollection('corrective_actions')[0];
+    expect(action.completed_at).toMatch(/^\d{4}-/);
+    const completedAt = action.completed_at;
+
+    updateCorrectiveAction(action.corrective_action_id, { action_description: 'Ajuste final' });
+    action = loadCollection('corrective_actions')[0];
+    expect(action.completed_at).toBe(completedAt);
+    expect(action.status).toBe('completed');
   });
 
   it('shows conditional inspections in the review tray without creating a non-conformance', () => {

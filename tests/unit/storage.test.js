@@ -76,7 +76,7 @@ describe('entity storage', () => {
     expect(validateEntity({name:'A', code:'B', creditLimit:-1}).valid).toBe(false);
     expect(validateEntity({name:'A', code:'B', creditLimit:-1}).errors.creditLimit).toContain('no negativo');
     expect(validateEntity({name:'A', code:'B', creditLimit:5000}).valid).toBe(true);
-    const e = addEntity({name:'A', code:'B', creditLimit:'5000'});
+    addEntity({name:'A', code:'B', creditLimit:'5000'});
     expect(loadEntities()[0].creditLimit).toBe(5000);
   });
 
@@ -260,7 +260,7 @@ describe('document storage', () => {
     setActiveConfig({
       customFields: [{ target: 'document', key: 'metodoEnvio', label: 'Método de envío', type: 'select', options: ['estándar','exprés'] }]
     });
-    const d = addDocument({entityId:entity.entity_id, folio:1, startDate:'2026-08-01', endDate:'2026-08-05', metodoEnvio:'exprés'});
+    addDocument({entityId:entity.entity_id, folio:1, startDate:'2026-08-01', endDate:'2026-08-05', metodoEnvio:'exprés'});
     expect(loadDocuments()[0].metodoEnvio).toBe('exprés');
     expect(validateDocument({entityId:entity.entity_id, folio:2, startDate:'2026-08-01', endDate:'2026-08-05', metodoEnvio:'urgentemente'}).errors.metodoEnvio).toContain('debe ser uno de');
   });
@@ -292,7 +292,7 @@ describe('document status lifecycle', () => {
     setActiveConfig({
       statusLifecycle: { statuses:['cotización','pedido','facturado'], transitions:{ cotización:['pedido'], pedido:['facturado'], facturado:[] } }
     });
-    const d = addDocument({entityId:entity.entity_id, folio:1, startDate:'2026-08-01', endDate:'2026-08-05', status:'pedido'});
+    addDocument({entityId:entity.entity_id, folio:1, startDate:'2026-08-01', endDate:'2026-08-05', status:'pedido'});
     expect(loadDocuments()[0].status).toBe('pedido');
   });
 

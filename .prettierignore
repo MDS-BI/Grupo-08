@@ -1,0 +1,11 @@
+# Los archivos existentes conservan el estilo histórico del repositorio.
+# Solo se exige formato Prettier a los archivos nuevos del módulo de Control de Calidad.
+src/**
+tests/**/*.js
+!tests/setup/setup.js
+!src/components/quality-audit-log.js
+!tests/unit/quality-audit-log.test.js
+!tests/integration/quality-audit-log.test.js
+dist/
+coverage/
+node_modules/

@@ -3,14 +3,14 @@
 **Módulo**: `002-quality-control-module`  
 **Estado**: Vigente  
 **Metodología**: Spec-Driven Development (Speckit)  
-**Actualizado**: 2026-11-17 (US7–US9 y clarificaciones de evidencia, exportación y alertas)
+**Actualizado**: 2026-11-22 (US7–US9 y clarificaciones de evidencia, exportación y alertas; US10 y bitácora de auditoría)
 **Modelo de datos**: [data-model.md](data-model.md)  
 **Módulo base relacionado**: [001-erp-base-module](../001-erp-base-module/)  
 **Historias de usuario**: [Historias-Usuarios.md](../../Historias-Usuarios.md) (reflejadas y detalladas en `spec.md`)
 
 ## 1. Resumen
 
-Desarrollar un módulo ERP para gestionar planes y criterios de inspección, identificar lotes pendientes, registrar inspecciones y resultados, documentar no conformidades y dar seguimiento a acciones correctivas o preventivas (CAPA). El módulo se integra con productos, empleados, recepciones, órdenes de producción y despachos de los módulos correspondientes. Adicionalmente, permite exportar reportes de calidad, adjuntar evidencia documental y configurar alertas sobre los indicadores del dashboard.
+Desarrollar un módulo ERP para gestionar planes y criterios de inspección, identificar lotes pendientes, registrar inspecciones y resultados, documentar no conformidades y dar seguimiento a acciones correctivas o preventivas (CAPA). El módulo se integra con productos, empleados, recepciones, órdenes de producción y despachos de los módulos correspondientes. Adicionalmente, permite exportar reportes de calidad, adjuntar evidencia documental, configurar alertas sobre los indicadores del dashboard y auditar los cambios sobre registros de calidad.
 
 El objetivo del MVP es demostrar el flujo completo de calidad: definir un plan, identificar un lote pendiente, ejecutar una inspección con evaluación automática de tolerancias, generar una no conformidad cuando corresponda, revisar inspecciones condicionales y lotes en cuarentena, cerrar el ciclo con una acción CAPA, respaldar las decisiones con evidencia adjunta, exportar la información para auditoría y alertar cuando los umbrales de calidad se incumplen.
 
@@ -28,7 +28,7 @@ El objetivo del MVP es demostrar el flujo completo de calidad: definir un plan, 
 | :--- | :--- | :--- |
 | **Inspector de Calidad** | Identificar lotes pendientes, registrar mediciones y adjuntar evidencia. | Ver lotes pendientes, crear inspecciones, ingresar resultados por criterio, ejecutar la evaluación automática y adjuntar evidencia. |
 | **Jefe de Calidad / Planta** | Definir estándares, revisar desviaciones, resolver no conformidades y configurar alertas. | Crear y mantener planes y criterios, clasificar no conformidades, revisar inspecciones condicionales, gestionar cuarentena, asignar acciones CAPA, adjuntar evidencia y configurar reglas de alerta. |
-| **Gerente de Operaciones** | Evaluar desempeño y cumplimiento normativo. | Consultar y exportar KPIs, revisar y exportar el historial de inspecciones y auditar la trazabilidad y los plazos CAPA. |
+| **Gerente de Operaciones** | Evaluar desempeño y cumplimiento normativo. | Consultar y exportar KPIs, revisar y exportar el historial de inspecciones, auditar la trazabilidad y los plazos CAPA, y consultar la bitácora de cambios. |
 
 ## 4. Alcance funcional del MVP
 
@@ -45,6 +45,7 @@ El objetivo del MVP es demostrar el flujo completo de calidad: definir un plan, 
 - Exportar en CSV el historial filtrado y el resumen de indicadores del dashboard.
 - Adjuntar evidencia (PNG/JPG/PDF) a inspecciones y no conformidades, con validación de tipo, 5 MB por archivo, 8 MB acumulados y cuota.
 - Configurar reglas de alerta sobre los indicadores del dashboard y mostrar las alertas cuando se incumple un umbral.
+- Consultar una bitácora de altas, ediciones, cambios de estado y eliminaciones sobre inspecciones, no conformidades y CAPA, filtrable por lote y rango de fechas.
 
 **Fuera del MVP (escalabilidad futura):** bloqueo automático de inventario, calificación de proveedores, inspección de devoluciones (`returns_rma`), integración IoT, valorización monetaria de no calidad, métricas por línea de producción, exportación masiva o integración con BI, firma digital de evidencia y notificaciones externas de alertas. Se documentan como evolución, no como alcance de esta entrega.
 
@@ -60,6 +61,7 @@ El objetivo del MVP es demostrar el flujo completo de calidad: definir un plan, 
 8. **Exportación de reportes.** Exportación CSV UTF-8 del historial filtrado (con columna `resultados` por criterio) y del resumen de KPIs, con nombre de archivo que incluye módulo, fecha de generación y filtros aplicados.
 9. **Evidencia de calidad.** Carga, listado y descarga de archivos PNG/JPG/PDF de hasta 5 MB por archivo y 8 MB acumulados, con validación de tipo, tamaño, cuota y autor.
 10. **Alertas de calidad.** Configuración de reglas de umbral sobre los KPIs, con indicadores, operadores y severidades canónicos, desactivación/eliminación e indicación visual de las alertas incumplidas en el dashboard.
+11. **Bitácora de auditoría.** Consulta de entradas por entidad, acción, lote y rango de fechas, con campo modificado, valores anterior/nuevo, actor, justificación y estado vacío.
 
 ## 6. Alineación con el modelo de datos
 
@@ -75,6 +77,7 @@ La fuente de verdad es [data-model.md](data-model.md). Las entidades del módulo
 | `corrective_actions` | Acción CAPA, responsable, causa raíz, tipo de acción, vencimiento y estado. |
 | `quality_evidence` | Archivo de respaldo vinculado a una inspección o a una no conformidad. |
 | `quality_alert_rules` | Regla de umbral configurable sobre un indicador del dashboard. |
+| `quality_audit_log` | Entrada inmutable de auditoría con lote persistido, entidad, acción, campo y valores, actor, marca temporal y justificación. |
 
 **Enumeraciones canónicas** (deben usarse de forma idéntica en código, datos y pruebas):
 
@@ -94,6 +97,8 @@ La fuente de verdad es [data-model.md](data-model.md). Las entidades del módulo
 | `alert_metric` | `approval_rate`, `open_non_conformances`, `overdue_capa`, `capa_effectiveness`, `pending_inspections` |
 | `alert_operator` | `lt`, `lte`, `gt`, `gte`, `eq` |
 | `alert_severity` | `info`, `warning`, `critical` |
+| `audit_entity` | `inspection`, `non_conformance`, `corrective_action` |
+| `audit_action` | `create`, `update`, `status_change`, `delete` |
 
 **Reglas de negocio del MVP:**
 
@@ -105,6 +110,7 @@ La fuente de verdad es [data-model.md](data-model.md). Las entidades del módulo
 - Una inspección con `overall_result = conditional` se marca en la bandeja de revisión y no genera no conformidad.
 - El jefe de calidad puede cambiar el dictamen solo con justificación registrada; no puede aprobar una inspección con criterios críticos fallidos o sin medición.
 - Toda acción CAPA debe tener responsable, descripción, causa raíz, tipo de acción y `due_date`; una acción vencida se marca como tal en el dashboard.
+- Toda acción sobre inspección, NC o CAPA genera una entrada de auditoría con lote persistido (`reference_module` + `reference_id`), actor y `timestamp`; el override genera una sola entrada `status_change` y las entradas sobreviven a las eliminaciones permitidas, incluida la eliminación directa de CAPA.
 - Los planes y criterios con inspecciones históricas no se editan ni eliminan; se duplican para crear una nueva versión.
 - La exportación se deriva de los datos consultados: el historial respeta los filtros activos, incluye una columna `resultados` con `criterio:medido:cumple` y el resumen usa los mismos KPIs del dashboard; no se persiste un archivo de exportación.
 - La evidencia se vincula a una inspección o a una no conformidad existente, registra nombre, tipo, tamaño, contenido base64, autor (empleado seleccionado), fecha, y se rechaza si el tipo no es PNG/JPG/PDF, si supera 5 MB por archivo o si excede el límite acumulado de 8 MB o la cuota de `localStorage`, conservando la evidencia previa.
@@ -137,7 +143,7 @@ Este es el riesgo principal señalado en el feedback y debe resolverse antes de 
 - Las reglas de alerta son locales al módulo de calidad y se evalúan con los datos ya cargados en el dashboard.
 - La integración se considerará lograda cuando una inspección pueda vincularse a un origen válido, consultar producto e inspector, registrar resultados, no conformidades y evidencia, mantener el seguimiento CAPA, exportar sus datos y evaluar alertas sin referencias huérfanas.
 
-**Estado de la integración.** El código del módulo base y del módulo de calidad ya está en el repositorio y es ejecutable. La aplicación Vite arranca desde `index.html` y `src/main.js`, que invoca `boot()` en `src/app.js`. La capa de datos está en `src/storage.js` (colecciones en `localStorage` con identificadores `string`, validación de referencias polimórficas, generación automática de no conformidades y derivación de lotes pendientes y cuarentena); el motor de tolerancias en `src/inspection-engine.js`; la configuración del módulo en `src/module-config.js`; y los datos semilla de las dependencias externas en `src/seed-data.js`. Las vistas del módulo de calidad están en `src/components/`: `dashboard.js` (KPIs y Pareto), `pending-lots.js`, `quality-plan-config.js`, `inspection-engine.js` (formulario y evaluación), `non-conformance-capa.js` (no conformidades, CAPA y cuarentena) e `inspection-history.js`, apoyadas por `shell.js` y `quality-utils.js`; los componentes del módulo base (`entity-form.js`, `entity-list.js`, `document-form.js`, `document-list.js`, `custom-fields.js`, `search-bar.js`) se reutilizan para la navegación y la administración del ERP. La suite de `tests/` (`unit/`, `integration/` y `support/`) cubre el motor de tolerancias, las derivaciones, el flujo de inspección y las vistas de calidad. La integración ya vincula inspecciones a orígenes válidos sin referencias huérfanas. US7–US9 (exportación, evidencia y alertas) están especificadas y documentadas, pero su implementación y pruebas siguen pendientes (T065–T079); resta validar de extremo a extremo la versión integrada con los datos semilla.
+**Estado de la integración.** El código del módulo base y del módulo de calidad ya está en el repositorio y es ejecutable. La aplicación Vite arranca desde `index.html` y `src/main.js`, que invoca `boot()` en `src/app.js`. La capa de datos está en `src/storage.js` (colecciones en `localStorage` con identificadores `string`, validación de referencias polimórficas, generación automática de no conformidades y derivación de lotes pendientes y cuarentena); el motor de tolerancias en `src/inspection-engine.js`; la configuración del módulo en `src/module-config.js`; y los datos semilla de las dependencias externas en `src/seed-data.js`. Las vistas del módulo de calidad están en `src/components/`: `dashboard.js` (KPIs y Pareto), `pending-lots.js`, `quality-plan-config.js`, `inspection-engine.js` (formulario y evaluación), `non-conformance-capa.js` (no conformidades, CAPA y cuarentena) e `inspection-history.js`, apoyadas por `shell.js` y `quality-utils.js`; los componentes del módulo base (`entity-form.js`, `entity-list.js`, `document-form.js`, `document-list.js`, `custom-fields.js`, `search-bar.js`) se reutilizan para la navegación y la administración del ERP. La suite de `tests/` (`unit/`, `integration/` y `support/`) cubre el motor de tolerancias, las derivaciones, el flujo de inspección y las vistas de calidad. La integración ya vincula inspecciones a orígenes válidos sin referencias huérfanas. US7–US10 (exportación, evidencia, alertas y bitácora) están especificadas y documentadas, pero su implementación y pruebas siguen pendientes (T065–T093); resta validar de extremo a extremo la versión integrada con los datos semilla.
 
 ## 8. Estructura del proyecto
 
@@ -253,19 +259,20 @@ El módulo se considerará terminado cuando:
 | Trabajar en los specs e historias de usuario | `Historias-Usuarios.md` se refleja en `spec.md` con prioridades y criterios Dado/Cuando/Entonces, incluyendo lotes pendientes y cuarentena. |
 | Dividirse las historias y tareas | `tasks.md` incluye responsables por fase, fechas y tareas paralelizables. |
 | Ejecutar una versión integrada de prueba | Fase 4 y sección 12; la versión integrada se valida con el módulo base y los datos semilla (sección 7). |
-| Nuevas historias de exportación, evidencia y alertas | US7–US9 se integran en §4–§9, con FR-041–FR-047, SC-012–SC-015 y las tareas T065–T082. |
+| Nuevas historias de exportación, evidencia y alertas | US7–US9 se integran en §4–§9, con FR-041–FR-047, SC-012–SC-015 y las tareas T065–T082; US10 (bitácora) queda reflejada en §4–§6, FR-048–FR-050, SC-016 y T083–T093. |
 
 ## 14. Pendientes antes de implementar
 
 **Estado actual.** El código base y del módulo de calidad ya está en el repositorio y es ejecutable con `npm run dev`, con la suite en `npm test`. Existen `index.html`, `src/main.js`, `src/app.js`, `src/storage.js`, `src/inspection-engine.js`, `src/module-config.js` y `src/seed-data.js`; las vistas de calidad en `src/components/` (`dashboard.js`, `pending-lots.js`, `quality-plan-config.js`, `inspection-engine.js`, `non-conformance-capa.js`, `inspection-history.js`, `shell.js`, `quality-utils.js`); y las pruebas en `tests/unit/`, `tests/integration/` y `tests/support/`.
 
-**Pendiente de implementación:** US7–US9 (exportación CSV, evidencia y alertas) están especificadas y documentadas en este plan, pero su código y pruebas aún no existen; corresponden a T065–T079. Las pruebas actuales cubren el flujo base, no las nuevas vistas.
+**Pendiente de implementación:** US7–US10 (exportación CSV, evidencia, alertas y bitácora de auditoría) están especificadas y documentadas en este plan, pero su código y pruebas aún no existen; corresponden a T065–T093. Las pruebas actuales cubren el flujo base, no las nuevas vistas.
 
 **Pendientes:**
 - Definir y configurar los comandos de lint, formato y análisis estático.
 - Validar de extremo a extremo la versión integrada con el módulo base y los datos semilla.
 - Validar la exportación con hasta 500 inspecciones en menos de 2 segundos (SC-012).
 - Validar los límites de tipo y tamaño de evidencia y la evaluación de reglas de alerta en el dashboard.
+- Validar la bitácora filtrada por lote y rango de fechas con hasta 500 inspecciones en menos de 2 segundos (SC-016).
 
 ## 15. Escalabilidad y desarrollo futuro
 
