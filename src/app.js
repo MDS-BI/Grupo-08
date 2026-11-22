@@ -267,8 +267,6 @@ function applyLabels(config){
   qs('action-new-entity-sub').textContent = `Crear un registro de ${entity.toLowerCase()}`;
   qs('action-new-document-title').textContent = `${femDocument ? 'Nueva' : 'Nuevo'} ${document_}`;
   qs('action-new-document-sub').textContent = `Registrar un registro de ${document_.toLowerCase()}`;
-  qs('action-open-entities-title').textContent = entities;
-  qs('action-open-entities-sub').textContent = `Abrir la gestión de ${entities.toLowerCase()}`;
   qs('action-find-title').textContent = 'Buscar registros';
   qs('action-find-sub').textContent = `Buscar ${entities.toLowerCase()}`;
 
@@ -310,7 +308,6 @@ function wireEvents(){
   });
   qs('action-new-entity').addEventListener('click', () => showModule('entities', { newRecord: true, focusForm: true }));
   qs('action-new-document').addEventListener('click', () => showModule('documents', { newRecord: true, focusForm: true }));
-  qs('action-open-entities').addEventListener('click', () => showModule('entities'));
   qs('action-find').addEventListener('click', () => showModule('search', { focusSearch: true }));
   qs('entity-form').addEventListener('submit', handleEntitySubmit);
   qs('cancel-edit').addEventListener('click', clearEntityForm);
