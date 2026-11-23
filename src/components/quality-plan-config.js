@@ -12,7 +12,9 @@ import {
   planHasInspections,
   validateInspectionPlan,
   validateCriterion,
-  isPlanEnabled
+  isPlanEnabled,
+  qualityCatalog,
+  qualityParameter
 } from '../storage.js';
 import { buildReferenceMaps, productName, stageLabel, qs, cell, actionButton, emptyState } from './quality-utils.js';
 
@@ -70,7 +72,10 @@ export function clearPlanForm(){
   qs('plan-id').value = '';
   qs('plan-name').value = '';
   qs('plan-product').value = '';
-  qs('plan-stage').value = 'incoming';
+  const stages = qualityCatalog('inspection_categories');
+  qs('plan-stage').value = stages.some(item => item.key === qualityParameter('default_inspection_stage'))
+    ? qualityParameter('default_inspection_stage')
+    : stages[0]?.key || '';
   qs('plan-submit').textContent = 'Guardar plan';
   qs('plan-cancel').hidden = true;
   showPlanErrors({});
@@ -104,6 +109,20 @@ function populateProductSelect(){
     select.appendChild(opt);
   });
   if(prev && [...select.options].some(o => o.value === prev)) select.value = prev;
+}
+
+function populateStageSelect(){
+  const select = qs('plan-stage');
+  if(!select) return;
+  const prev = select.value || qualityParameter('default_inspection_stage');
+  select.innerHTML = '';
+  qualityCatalog('inspection_categories').forEach(item => {
+    const opt = document.createElement('option');
+    opt.value = item.key;
+    opt.textContent = item.label;
+    select.appendChild(opt);
+  });
+  if(prev && [...select.options].some(opt => opt.value === prev)) select.value = prev;
 }
 
 function populateCriteriaPlanSelect(){
@@ -228,6 +247,7 @@ export function renderCriteriaList(){
 
 export function renderPlanConfig(){
   populateProductSelect();
+  populateStageSelect();
   populateCriteriaPlanSelect();
   renderPlansList();
   renderCriteriaList();

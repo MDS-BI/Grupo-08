@@ -361,15 +361,6 @@ button.danger:hover { background: #fae3df; }
   font-weight: 600;
 }
 
-#view-quality-dashboard .card,
-#view-pending-lots .card,
-#view-quality-plans .card,
-#view-inspections .card,
-#view-non-conformance .card,
-#view-quality-history .card {
-  max-width: 980px;
-}
-
 .quality-role-row {
   max-width: 320px;
   margin-top: 16px;

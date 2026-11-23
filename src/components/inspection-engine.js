@@ -9,7 +9,9 @@ import {
   completeInspection,
   validateInspection,
   evidenceFor,
-  deleteEvidence
+  deleteEvidence,
+  qualityCatalog,
+  qualityParameter
 } from '../storage.js';
 import { evaluateInspection } from '../inspection-engine.js';
 import {
@@ -39,6 +41,21 @@ const STAGE_BY_MODULE = Object.freeze({
   shipment: 'final'
 });
 
+function stageOptions(){
+  return qualityCatalog('inspection_categories');
+}
+
+function preferredStage(module, keepCurrent = true){
+  const options = stageOptions();
+  const current = keepCurrent && qs('inspection-stage') ? qs('inspection-stage').value : '';
+  if(current && options.some(item => item.key === current)) return current;
+  const mapped = STAGE_BY_MODULE[module];
+  if(mapped && options.some(item => item.key === mapped)) return mapped;
+  const configured = qualityParameter('default_inspection_stage');
+  if(configured && options.some(item => item.key === configured)) return configured;
+  return options[0] ? options[0].key : '';
+}
+
 function referenceContext(referenceModule, referenceId){
   const module = referenceModule || (qs('inspection-module') ? qs('inspection-module').value : '') || 'goods_receipt';
   const reference = referenceId !== undefined
@@ -47,7 +64,10 @@ function referenceContext(referenceModule, referenceId){
   const document = reference
     ? externalDocuments().find(doc => doc.reference_module === module && doc.reference_id === reference)
     : null;
-  return { module, reference, productId: document ? document.product_id : '', stage: STAGE_BY_MODULE[module] || '' };
+  const stage = qs('inspection-stage') && qs('inspection-stage').value
+    ? qs('inspection-stage').value
+    : preferredStage(module);
+  return { module, reference, productId: document ? document.product_id : '', stage };
 }
 
 function enabledPlans(context = {}){
@@ -144,6 +164,21 @@ function populateSelect(select, records, valueKey, labelKey, blankLabel){
   if(prev && [...select.options].some(o => o.value === prev)) select.value = prev;
 }
 
+function populateStageSelect(){
+  const select = qs('inspection-stage');
+  if(!select) return;
+  const module = qs('inspection-module') ? qs('inspection-module').value : 'goods_receipt';
+  const previous = select.value || preferredStage(module, false);
+  select.innerHTML = '';
+  stageOptions().forEach(item => {
+    const opt = document.createElement('option');
+    opt.value = item.key;
+    opt.textContent = item.label;
+    select.appendChild(opt);
+  });
+  if(previous && [...select.options].some(opt => opt.value === previous)) select.value = previous;
+}
+
 export function renderReferenceOptions(module, selected){
   const select = qs('inspection-reference');
   if(!select) return;
@@ -174,6 +209,7 @@ export function renderMeasurements(planId, existingResults = []){
     empty.className = 'empty';
     empty.textContent = 'Selecciona un plan habilitado para ver sus criterios de medición.';
     container.appendChild(empty);
+    renderChecklist(null);
     return;
   }
 
@@ -217,6 +253,93 @@ export function renderMeasurements(planId, existingResults = []){
 
     container.appendChild(row);
   });
+
+  renderChecklist(plan, existingResults);
+}
+
+function setChecklistState(item, passFail){
+  item.dataset.state = passFail ? 'pass' : 'fail';
+  const icon = item.querySelector('.check-icon');
+  const state = item.querySelector('.check-state');
+  if(icon) icon.textContent = passFail ? '✓' : '!';
+  if(state) state.textContent = passFail ? 'Cumple' : 'No cumple';
+}
+
+function updateChecklistProgress(container){
+  const items = [...container.querySelectorAll('.checklist-item')];
+  const evaluated = items.filter(item => item.dataset.state === 'pass' || item.dataset.state === 'fail').length;
+  const progressText = qs('checklist-progress-text');
+  const progressBar = qs('checklist-progress-bar');
+  if(progressText) progressText.textContent = `${evaluated}/${items.length} criterios evaluados`;
+  if(progressBar) progressBar.style.width = `${items.length ? Math.round((evaluated / items.length) * 100) : 0}%`;
+}
+
+function renderChecklist(plan, existingResults = []){
+  const container = qs('inspection-checklist');
+  if(!container) return;
+  container.innerHTML = '';
+  if(!plan || plan.criteria.length === 0){
+    const item = document.createElement('div');
+    item.className = 'checklist-item';
+    const icon = document.createElement('span');
+    icon.className = 'check-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '·';
+    const name = document.createElement('span');
+    name.className = 'check-name';
+    name.textContent = 'Selecciona un plan para ver sus criterios.';
+    item.append(icon, name);
+    container.appendChild(item);
+    const progressText = qs('checklist-progress-text');
+    const progressBar = qs('checklist-progress-bar');
+    if(progressText) progressText.textContent = '0/0 criterios evaluados';
+    if(progressBar) progressBar.style.width = '0%';
+    return;
+  }
+
+  const byCriteria = new Map((existingResults || []).map(result => [result.criteria_id, result]));
+  plan.criteria.forEach(criterion => {
+    const item = document.createElement('div');
+    item.className = 'checklist-item';
+    item.dataset.checkFor = criterion.criteria_id;
+    item.dataset.state = 'pending';
+    const icon = document.createElement('span');
+    icon.className = 'check-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '·';
+    const name = document.createElement('span');
+    name.className = 'check-name';
+    name.textContent = criterion.criteria_name;
+    const state = document.createElement('span');
+    state.className = 'check-state';
+    state.textContent = 'Pendiente';
+    item.append(icon, name, state);
+    container.appendChild(item);
+    const existing = byCriteria.get(criterion.criteria_id);
+    if(existing && existing.pass_fail !== undefined && existing.pass_fail !== null){
+      setChecklistState(item, Boolean(existing.pass_fail));
+    }
+  });
+  updateChecklistProgress(container);
+}
+
+function updateChecklist(evaluation){
+  const container = qs('inspection-checklist');
+  if(!container) return;
+  evaluation.results.forEach(result => {
+    const item = container.querySelector(`[data-check-for="${result.criteria_id}"]`);
+    if(!item) return;
+    if(result.pass_fail === null){
+      item.dataset.state = 'pending';
+      const icon = item.querySelector('.check-icon');
+      const state = item.querySelector('.check-state');
+      if(icon) icon.textContent = '·';
+      if(state) state.textContent = 'Pendiente';
+      return;
+    }
+    setChecklistState(item, result.pass_fail);
+  });
+  updateChecklistProgress(container);
 }
 
 export function previewEvaluation(){
@@ -259,6 +382,7 @@ function updateMeasurementBadges(evaluation){
     badge.textContent = result.pass_fail ? 'Cumple' : 'No cumple';
     badge.classList.add(result.pass_fail ? 'pass' : 'fail');
   });
+  updateChecklist(evaluation);
 }
 
 function numericResults(evaluation){
@@ -296,6 +420,7 @@ function showDraftSaved(){
 export function resetInspectionForm(options = {}){
   qs('inspection-id').value = '';
   qs('inspection-reference').value = '';
+  if(qs('inspection-stage')) qs('inspection-stage').value = preferredStage(qs('inspection-module').value, false);
   qs('inspection-date').value = todayIso();
   clearInspectionErrors();
   const error = qs('inspection-error');
@@ -363,7 +488,9 @@ export function handleCompleteInspection(){
 }
 
 function loadDraft(inspection){
+  const plan = selectedPlan(inspection.inspection_plan_id);
   qs('inspection-id').value = inspection.inspection_id;
+  if(qs('inspection-stage') && plan) qs('inspection-stage').value = plan.applicable_stage;
   qs('inspection-plan').value = inspection.inspection_plan_id;
   qs('inspection-inspector').value = inspection.inspector_id;
   qs('inspection-module').value = inspection.reference_module;
@@ -495,6 +622,7 @@ export function renderInspectionView(options = {}){
     ? options.referenceId
     : (qs('inspection-reference') ? qs('inspection-reference').value : '');
   renderReferenceOptions(module, selectedReference);
+  populateStageSelect();
   const context = referenceContext(module, qs('inspection-reference') ? qs('inspection-reference').value : '');
   populateSelect(planSelect, enabledPlans(context), 'inspection_plan_id', plan => `${plan.plan_name} · ${stageLabel(plan.applicable_stage)}`, '-- Selecciona un plan habilitado --');
   populateSelect(qs('inspection-inspector'), loadExternal('employees'), 'employee_id', 'name', '-- Selecciona un inspector --');
@@ -523,6 +651,7 @@ export function renderInspectionView(options = {}){
 
 export function startInspection(referenceModule, referenceId){
   qs('inspection-id').value = '';
+  if(qs('inspection-stage')) qs('inspection-stage').value = '';
   renderInspectionView({ referenceModule, referenceId });
   const error = qs('inspection-error');
   if(error){ error.textContent = ''; error.classList.remove('info'); }
@@ -556,7 +685,14 @@ export function initInspectionEngine(){
   });
   qs('inspection-module').addEventListener('change', () => {
     qs('inspection-id').value = '';
+    if(qs('inspection-stage')) qs('inspection-stage').value = '';
     renderInspectionView({ referenceModule: qs('inspection-module').value, referenceId: '' });
+    previewEvaluation();
+  });
+  qs('inspection-stage').addEventListener('change', () => {
+    qs('inspection-id').value = '';
+    qs('inspection-plan').value = '';
+    renderInspectionView({ referenceModule: qs('inspection-module').value, referenceId: qs('inspection-reference').value });
     previewEvaluation();
   });
   qs('inspection-reference').addEventListener('change', () => {

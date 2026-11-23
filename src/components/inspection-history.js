@@ -21,15 +21,18 @@ import { rowsToCsv, downloadContent, safeFilenamePart } from './csv.js';
 import { downloadEvidence } from './evidence.js';
 
 export function currentFilters(){
+  const search = qs('history-search');
   return {
     module: qs('history-module').value,
     lot: qs('history-lot').value,
     from: qs('history-from').value,
-    to: qs('history-to').value
+    to: qs('history-to').value,
+    search: search ? search.value.trim().toLowerCase() : ''
   };
 }
 
 export function filterInspections(inspections, filters){
+  const maps = filters.search ? buildReferenceMaps() : null;
   return inspections.filter(inspection => {
     if(filters.module && inspection.reference_module !== filters.module) return false;
     if(filters.lot){
@@ -38,6 +41,20 @@ export function filterInspections(inspections, filters){
     }
     if(filters.from && inspection.inspection_date < filters.from) return false;
     if(filters.to && inspection.inspection_date > filters.to) return false;
+    if(filters.search){
+      const plan = maps.plans.get(inspection.inspection_plan_id);
+      const text = [
+        inspection.inspection_date,
+        inspection.reference_id,
+        moduleLabel(inspection.reference_module),
+        plan ? productName(maps, plan.product_id) : '',
+        planName(maps, inspection.inspection_plan_id),
+        employeeName(maps, inspection.inspector_id),
+        resultLabel(inspection.overall_result),
+        statusLabel(inspection.inspection_status)
+      ].join(' ').toLowerCase();
+      if(!text.includes(filters.search)) return false;
+    }
     return true;
   }).sort((a, b) => String(b.inspection_date).localeCompare(String(a.inspection_date)));
 }
@@ -184,7 +201,12 @@ export function renderHistory(){
     tbody.appendChild(tr);
   });
 
-  if(empty) empty.hidden = rows.length > 0;
+  if(empty){
+    empty.hidden = rows.length > 0;
+    empty.textContent = filters.search
+      ? 'Ninguna inspección coincide con la búsqueda.'
+      : 'No hay inspecciones para los filtros aplicados.';
+  }
   return rows;
 }
 
@@ -193,6 +215,8 @@ export function clearHistoryFilters(){
   renderHistoryLotOptions('');
   qs('history-from').value = '';
   qs('history-to').value = '';
+  const search = qs('history-search');
+  if(search) search.value = '';
   const error = qs('history-error');
   if(error) error.textContent = '';
   renderHistory();
@@ -219,6 +243,8 @@ export function initInspectionHistory(){
   button.addEventListener('click', () => renderHistory());
   qs('history-clear').addEventListener('click', () => clearHistoryFilters());
   qs('history-module').addEventListener('change', () => renderHistoryLotOptions(''));
+  const search = qs('history-search');
+  if(search) search.addEventListener('input', () => renderHistory());
   const exportButton = qs('history-export');
   if(exportButton) exportButton.addEventListener('click', () => exportHistoryCsv());
   const body = qs('history-body');

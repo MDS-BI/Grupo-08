@@ -325,9 +325,10 @@ export const DEFECT_TYPES = Object.freeze(['dimensional', 'functional', 'packagi
 export const SEVERITIES = Object.freeze(['minor', 'major', 'critical']);
 export const NON_CONFORMANCE_STATUSES = Object.freeze(['open', 'under_review', 'closed']);
 export const CORRECTIVE_ACTION_STATUSES = Object.freeze(['pending', 'in_progress', 'completed']);
+export const ACTION_CATEGORIES = Object.freeze(['corrective', 'preventive']);
 export const ACTION_TYPES = Object.freeze(['resampling', 'rework', 'other']);
 export const REFERENCE_MODULES = Object.freeze(['goods_receipt', 'production_order', 'shipment']);
-export const EVIDENCE_ENTITY_TYPES = Object.freeze(['inspection', 'non_conformance']);
+export const EVIDENCE_ENTITY_TYPES = Object.freeze(['inspection', 'non_conformance', 'corrective_action']);
 export const EVIDENCE_MIME_TYPES = Object.freeze(['image/png', 'image/jpeg', 'application/pdf']);
 export const EVIDENCE_MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const EVIDENCE_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
@@ -342,6 +343,52 @@ export const ALERT_OPERATORS = Object.freeze(['lt', 'lte', 'gt', 'gte', 'eq']);
 export const ALERT_SEVERITIES = Object.freeze(['info', 'warning', 'critical']);
 export const AUDIT_ENTITIES = Object.freeze(['inspection', 'non_conformance', 'corrective_action']);
 export const AUDIT_ACTIONS = Object.freeze(['create', 'update', 'status_change', 'delete']);
+export const QUALITY_DOCUMENT_CATEGORIES = Object.freeze(['manual', 'procedure', 'regulation', 'certificate', 'specification', 'other']);
+export const QUALITY_DOCUMENT_STATUSES = Object.freeze(['under_review', 'approved', 'draft', 'archived']);
+export const QUALITY_DOCUMENT_MIME_TYPES = Object.freeze(['image/png', 'image/jpeg', 'application/pdf']);
+export const QUALITY_DOCUMENT_MAX_FILE_BYTES = 10 * 1024 * 1024;
+const QUALITY_SETTINGS_KEY = 'erp_quality:settings';
+export const QUALITY_SETTING_TYPES = Object.freeze([
+  'inspection_categories',
+  'severity_levels',
+  'inspection_statuses',
+  'nc_statuses',
+  'action_types'
+]);
+const DEFAULT_QUALITY_SETTINGS = Object.freeze({
+  catalogs: Object.freeze({
+    inspection_categories: Object.freeze([
+      Object.freeze({ id: 'qset-stage-incoming', key: 'incoming', label: 'Recepción', description: 'Control documental y de materias primas al ingreso.', system: true }),
+      Object.freeze({ id: 'qset-stage-process', key: 'in_process', label: 'En proceso', description: 'Verificación de parámetros críticos durante la producción.', system: true }),
+      Object.freeze({ id: 'qset-stage-final', key: 'final', label: 'Final', description: 'Validación del producto terminado antes del despacho.', system: true })
+    ]),
+    severity_levels: Object.freeze([
+      Object.freeze({ id: 'qset-sev-minor', key: 'minor', label: 'Baja', description: 'Desviación sin impacto funcional relevante.', system: true }),
+      Object.freeze({ id: 'qset-sev-major', key: 'major', label: 'Media', description: 'Desviación que afecta el proceso o el producto.', system: true }),
+      Object.freeze({ id: 'qset-sev-critical', key: 'critical', label: 'Alta', description: 'Riesgo directo para el producto o el cliente.', system: true })
+    ]),
+    inspection_statuses: Object.freeze([
+      Object.freeze({ id: 'qset-istatus-draft', key: 'draft', label: 'Borrador', description: 'Inspección en captura; aún no genera dictamen.', system: true }),
+      Object.freeze({ id: 'qset-istatus-completed', key: 'completed', label: 'Completada', description: 'Inspección finalizada con dictamen registrado.', system: true })
+    ]),
+    nc_statuses: Object.freeze([
+      Object.freeze({ id: 'qset-ncstatus-open', key: 'open', label: 'Abierta', description: 'Detectada y pendiente de análisis.', system: true }),
+      Object.freeze({ id: 'qset-ncstatus-review', key: 'under_review', label: 'En revisión', description: 'En evaluación o esperando disposición.', system: true }),
+      Object.freeze({ id: 'qset-ncstatus-closed', key: 'closed', label: 'Solucionada', description: 'Cerrada tras la verificación correspondiente.', system: true })
+    ]),
+    action_types: Object.freeze([
+      Object.freeze({ id: 'qset-action-corrective', key: 'corrective', label: 'Correctiva', description: 'Elimina la causa de una desviación detectada.', system: true }),
+      Object.freeze({ id: 'qset-action-preventive', key: 'preventive', label: 'Preventiva', description: 'Previene una desviación potencial.', system: true })
+    ])
+  }),
+  parameters: Object.freeze({
+    approval_target: 90,
+    auto_create_nc_on_failure: true,
+    default_nc_severity: 'major',
+    default_nc_status: 'open',
+    default_inspection_stage: 'incoming'
+  })
+});
 const AUDIT_ROLE_KEY = 'erp_quality:viewer_role';
 const ALERT_RATE_METRICS = Object.freeze(['approval_rate', 'capa_effectiveness']);
 
@@ -354,7 +401,9 @@ const QUALITY_COLLECTION_KEYS = Object.freeze({
   corrective_actions: 'erp_quality:corrective_actions',
   quality_evidence: 'erp_quality:quality_evidence',
   quality_alert_rules: 'erp_quality:quality_alert_rules',
-  quality_audit_log: 'erp_quality:quality_audit_log'
+  quality_audit_log: 'erp_quality:quality_audit_log',
+  quality_checklists: 'erp_quality:quality_checklists',
+  quality_documents: 'erp_quality:quality_documents'
 });
 
 const EXTERNAL_COLLECTION_KEYS = Object.freeze({
@@ -364,6 +413,107 @@ const EXTERNAL_COLLECTION_KEYS = Object.freeze({
   production_order: SEED_KEYS.production_order,
   shipment: SEED_KEYS.shipment
 });
+
+const CHECKLIST_SEED = Object.freeze([
+  {
+    id: 'seed-checklist-1',
+    checklist_id: 'checklist-recepcion',
+    name: 'Recepción de materias primas',
+    description: 'Verificación documental, sensorial y de peso de cada lote recibido.',
+    category: 'Recepción',
+    status: 'active',
+    createdAt: '2026-11-02T09:00:00.000Z',
+    updatedAt: '2026-11-02T09:00:00.000Z',
+    criteria: [
+      { id: 'sc-11', criteria_id: 'sc-11', name: 'Documento de entrega', description: 'Remito y certificado presentes.', is_critical: true },
+      { id: 'sc-12', criteria_id: 'sc-12', name: 'Peso neto', description: 'Conforme a la orden de compra.', is_critical: false },
+      { id: 'sc-13', criteria_id: 'sc-13', name: 'Condición del embalaje', description: 'Sin daños ni humedad.', is_critical: false },
+      { id: 'sc-14', criteria_id: 'sc-14', name: 'Lote trazable', description: 'Código de lote legible.', is_critical: true }
+    ],
+    evaluations: []
+  },
+  {
+    id: 'seed-checklist-2',
+    checklist_id: 'checklist-proceso',
+    name: 'Control en proceso',
+    description: 'Controles de parámetros críticos durante la producción.',
+    category: 'Producción',
+    status: 'active',
+    createdAt: '2026-11-05T10:30:00.000Z',
+    updatedAt: '2026-11-05T10:30:00.000Z',
+    criteria: [
+      { id: 'sc-21', criteria_id: 'sc-21', name: 'Temperatura', description: 'Dentro del rango operativo.', is_critical: true },
+      { id: 'sc-22', criteria_id: 'sc-22', name: 'Tiempo de mezcla', description: 'Registro de ciclo completado.', is_critical: false },
+      { id: 'sc-23', criteria_id: 'sc-23', name: 'Limpieza de línea', description: 'Checklist de higiene firmado.', is_critical: false },
+      { id: 'sc-24', criteria_id: 'sc-24', name: 'Muestreo', description: 'Muestra identificada y sellada.', is_critical: true },
+      { id: 'sc-25', criteria_id: 'sc-25', name: 'Registro de turno', description: 'Datos cargados en el sistema.', is_critical: false }
+    ],
+    evaluations: []
+  },
+  {
+    id: 'seed-checklist-3',
+    checklist_id: 'checklist-despacho',
+    name: 'Verificación final de despacho',
+    description: 'Revisión de etiquetado, documentación y estado del producto terminado.',
+    category: 'Despacho',
+    status: 'draft',
+    createdAt: '2026-11-12T14:15:00.000Z',
+    updatedAt: '2026-11-12T14:15:00.000Z',
+    criteria: [
+      { id: 'sc-31', criteria_id: 'sc-31', name: 'Etiquetado', description: 'Lote, fecha y destino visibles.', is_critical: true },
+      { id: 'sc-32', criteria_id: 'sc-32', name: 'Documentación', description: 'Remito y certificado adjuntos.', is_critical: false },
+      { id: 'sc-33', criteria_id: 'sc-33', name: 'Sellado', description: 'Precinto íntegro y numerado.', is_critical: true }
+    ],
+    evaluations: []
+  }
+]);
+
+const DOCUMENT_PREVIEW_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
+
+const DOCUMENT_SEED = Object.freeze([
+  {
+    id: 'seed-doc-1', document_id: 'DOC-001', name: 'Manual de calidad',
+    category: 'manual', description: 'Política y alcance del sistema de gestión de calidad.',
+    file_name: 'manual-calidad.png', mime_type: 'image/png', size_bytes: 68,
+    data_url: DOCUMENT_PREVIEW_PNG, responsible_employee_id: 'emp-003',
+    status: 'approved', uploaded_at: '2026-10-02T09:00:00.000Z', updated_at: '2026-10-02T09:00:00.000Z', version: 2
+  },
+  {
+    id: 'seed-doc-2', document_id: 'DOC-002', name: 'Procedimiento de recepción',
+    category: 'procedure', description: 'Pasos para la inspección de materias primas.',
+    file_name: 'proc-recepcion.png', mime_type: 'image/png', size_bytes: 68,
+    data_url: DOCUMENT_PREVIEW_PNG, responsible_employee_id: 'emp-001',
+    status: 'approved', uploaded_at: '2026-10-08T11:30:00.000Z', updated_at: '2026-10-08T11:30:00.000Z', version: 1
+  },
+  {
+    id: 'seed-doc-3', document_id: 'DOC-003', name: 'Normativa ISO 9001',
+    category: 'regulation', description: 'Requisitos aplicables de la norma de referencia.',
+    file_name: 'iso-9001.png', mime_type: 'image/png', size_bytes: 68,
+    data_url: DOCUMENT_PREVIEW_PNG, responsible_employee_id: 'emp-003',
+    status: 'under_review', uploaded_at: '2026-11-04T08:15:00.000Z', updated_at: '2026-11-04T08:15:00.000Z', version: 1
+  },
+  {
+    id: 'seed-doc-4', document_id: 'DOC-004', name: 'Certificado de calibración',
+    category: 'certificate', description: 'Certificado vigente de la balanza de recepción.',
+    file_name: 'cert-calibracion.png', mime_type: 'image/png', size_bytes: 68,
+    data_url: DOCUMENT_PREVIEW_PNG, responsible_employee_id: 'emp-004',
+    status: 'under_review', uploaded_at: '2026-11-12T15:45:00.000Z', updated_at: '2026-11-12T15:45:00.000Z', version: 1
+  },
+  {
+    id: 'seed-doc-5', document_id: 'DOC-005', name: 'Especificación de harina',
+    category: 'specification', description: 'Parámetros técnicos exigidos al proveedor.',
+    file_name: 'esp-harina.png', mime_type: 'image/png', size_bytes: 68,
+    data_url: DOCUMENT_PREVIEW_PNG, responsible_employee_id: 'emp-002',
+    status: 'approved', uploaded_at: '2026-11-18T10:20:00.000Z', updated_at: '2026-11-18T10:20:00.000Z', version: 3
+  },
+  {
+    id: 'seed-doc-6', document_id: 'DOC-006', name: 'Acta de revisión mensual',
+    category: 'other', description: 'Acta de la reunión de revisión de calidad.',
+    file_name: 'acta-revision.png', mime_type: 'image/png', size_bytes: 68,
+    data_url: DOCUMENT_PREVIEW_PNG, responsible_employee_id: 'emp-003',
+    status: 'draft', uploaded_at: '2026-11-21T16:10:00.000Z', updated_at: '2026-11-21T16:10:00.000Z', version: 1
+  }
+]);
 
 function readList(key){
   try{
@@ -386,6 +536,197 @@ function resolveQualityKey(name){
   return key;
 }
 
+export function slugifySettingKey(value){
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function normalizeCatalog(type, rawItems){
+  const defaults = DEFAULT_QUALITY_SETTINGS.catalogs[type] || [];
+  const source = Array.isArray(rawItems) ? rawItems : defaults;
+  const seen = new Set();
+  const items = [];
+  source.forEach(raw => {
+    if(!raw || typeof raw !== 'object') return;
+    const key = slugifySettingKey(raw.key);
+    if(!key || seen.has(key)) return;
+    const fallback = defaults.find(item => item.key === key);
+    const system = raw.system === true || Boolean(fallback);
+    items.push({
+      id: String(raw.id || `${type}-${key}`),
+      key,
+      label: String(raw.label || fallback?.label || key).trim(),
+      description: String(raw.description || fallback?.description || '').trim(),
+      system
+    });
+    seen.add(key);
+  });
+  defaults.forEach(fallback => {
+    if(seen.has(fallback.key)) return;
+    items.push({ ...fallback });
+    seen.add(fallback.key);
+  });
+  return items;
+}
+
+export function normalizeQualitySettings(raw){
+  const catalogs = {};
+  QUALITY_SETTING_TYPES.forEach(type => {
+    catalogs[type] = normalizeCatalog(type, raw && raw.catalogs ? raw.catalogs[type] : null);
+  });
+  const keys = type => new Set(catalogs[type].map(item => item.key));
+  const severityKeys = keys('severity_levels');
+  const ncKeys = keys('nc_statuses');
+  const stageKeys = keys('inspection_categories');
+  const source = raw && raw.parameters ? raw.parameters : {};
+  const defaults = DEFAULT_QUALITY_SETTINGS.parameters;
+  const numericTarget = Number(source.approval_target ?? defaults.approval_target);
+  return {
+    catalogs,
+    parameters: {
+      approval_target: Number.isFinite(numericTarget) ? Math.max(0, Math.min(100, Math.round(numericTarget))) : defaults.approval_target,
+      auto_create_nc_on_failure: source.auto_create_nc_on_failure === undefined ? defaults.auto_create_nc_on_failure : Boolean(source.auto_create_nc_on_failure),
+      default_nc_severity: severityKeys.has(source.default_nc_severity) ? source.default_nc_severity : defaults.default_nc_severity,
+      default_nc_status: ncKeys.has(source.default_nc_status) ? source.default_nc_status : defaults.default_nc_status,
+      default_inspection_stage: stageKeys.has(source.default_inspection_stage) ? source.default_inspection_stage : defaults.default_inspection_stage
+    }
+  };
+}
+
+export function loadQualitySettings(){
+  try{
+    const raw = localStorage.getItem(QUALITY_SETTINGS_KEY);
+    return normalizeQualitySettings(raw ? JSON.parse(raw) : null);
+  }catch(e){
+    console.error('Failed to parse quality settings', e);
+    return normalizeQualitySettings(null);
+  }
+}
+
+export function saveQualitySettings(settings){
+  const normalized = normalizeQualitySettings(settings);
+  localStorage.setItem(QUALITY_SETTINGS_KEY, JSON.stringify(normalized));
+  return normalized;
+}
+
+export function resetQualitySettings(){
+  return saveQualitySettings(DEFAULT_QUALITY_SETTINGS);
+}
+
+export function qualityCatalog(type){
+  const settings = loadQualitySettings();
+  return [...(settings.catalogs[type] || [])];
+}
+
+export function qualityCatalogKeys(type){
+  return qualityCatalog(type).map(item => item.key);
+}
+
+export function qualityCatalogLabels(type){
+  return qualityCatalog(type).reduce((map, item) => {
+    map[item.key] = item.label;
+    return map;
+  }, {});
+}
+
+export function qualityParameter(name){
+  return loadQualitySettings().parameters[name];
+}
+
+export function updateQualityParameters(updates){
+  const settings = loadQualitySettings();
+  Object.entries(updates || {}).forEach(([name, value]) => {
+    if(Object.prototype.hasOwnProperty.call(DEFAULT_QUALITY_SETTINGS.parameters, name)) settings.parameters[name] = value;
+  });
+  return saveQualitySettings(settings).parameters;
+}
+
+export function qualitySettingUsage(type, key){
+  switch(type){
+    case 'inspection_categories':
+      return loadCollection('quality_inspection_plans').filter(item => item.applicable_stage === key).length;
+    case 'severity_levels':
+      return loadCollection('non_conformances').filter(item => item.severity === key).length;
+    case 'inspection_statuses':
+      return loadCollection('quality_inspections').filter(item => item.inspection_status === key).length;
+    case 'nc_statuses':
+      return loadCollection('non_conformances').filter(item => item.status === key).length;
+    case 'action_types':
+      return loadCollection('corrective_actions').filter(item => item.action_category === key).length;
+    default:
+      return 0;
+  }
+}
+
+export function addSettingItem(type, payload){
+  if(!QUALITY_SETTING_TYPES.includes(type)) throw new Error('Catálogo desconocido');
+  const settings = loadQualitySettings();
+  const key = slugifySettingKey(payload && payload.key);
+  const label = String(payload && payload.label || '').trim();
+  if(!key) throw new Error('La clave es obligatoria');
+  if(!label) throw new Error('El nombre es obligatorio');
+  if(settings.catalogs[type].some(item => item.key === key)) throw new Error('Ya existe un elemento con esa clave');
+  const item = {
+    id: generateId(),
+    key,
+    label,
+    description: String(payload.description || '').trim(),
+    system: false
+  };
+  settings.catalogs[type].push(item);
+  saveQualitySettings(settings);
+  return item;
+}
+
+export function updateSettingItem(type, id, updates){
+  if(!QUALITY_SETTING_TYPES.includes(type)) throw new Error('Catálogo desconocido');
+  const settings = loadQualitySettings();
+  const list = settings.catalogs[type];
+  const idx = list.findIndex(item => item.id === id || item.key === id);
+  if(idx === -1) throw new Error('Elemento no encontrado');
+  const previous = list[idx];
+  const nextKey = updates.key === undefined ? previous.key : slugifySettingKey(updates.key);
+  if(!nextKey) throw new Error('La clave es obligatoria');
+  if(updates.label !== undefined && !String(updates.label).trim()) throw new Error('El nombre es obligatorio');
+  if(previous.system && nextKey !== previous.key) throw new Error('La clave de un elemento del sistema no se puede modificar');
+  if(nextKey !== previous.key && list.some(item => item.key === nextKey)) throw new Error('Ya existe un elemento con esa clave');
+  if(nextKey !== previous.key && qualitySettingUsage(type, previous.key) > 0){
+    throw new Error('La clave está en uso y no se puede modificar');
+  }
+  list[idx] = {
+    ...previous,
+    key: nextKey,
+    label: updates.label === undefined ? previous.label : String(updates.label).trim(),
+    description: updates.description === undefined ? previous.description : String(updates.description).trim()
+  };
+  if(nextKey !== previous.key){
+    Object.entries(settings.parameters).forEach(([name, value]) => {
+      if(value === previous.key) settings.parameters[name] = nextKey;
+    });
+  }
+  saveQualitySettings(settings);
+  return list[idx];
+}
+
+export function deleteSettingItem(type, id){
+  if(!QUALITY_SETTING_TYPES.includes(type)) throw new Error('Catálogo desconocido');
+  const settings = loadQualitySettings();
+  const list = settings.catalogs[type];
+  const item = list.find(entry => entry.id === id || entry.key === id);
+  if(!item) throw new Error('Elemento no encontrado');
+  if(item.system) throw new Error('Los elementos del sistema no se pueden eliminar');
+  const usage = qualitySettingUsage(type, item.key);
+  if(usage > 0) throw new Error(`El elemento está en uso por ${usage} registro(s)`);
+  const usedAsParameter = Object.values(settings.parameters).includes(item.key);
+  if(usedAsParameter) throw new Error('El elemento está definido como parámetro predeterminado');
+  saveQualitySettings({ ...settings, catalogs: { ...settings.catalogs, [type]: list.filter(entry => entry.id !== item.id) } });
+  return true;
+}
+
 export function ensureSeedData(){
   const snapshot = seedDataSnapshot();
   for(const [name, records] of Object.entries(snapshot)){
@@ -393,6 +734,15 @@ export function ensureSeedData(){
     if(key && localStorage.getItem(key) === null){
       writeList(key, records);
     }
+  }
+  if(localStorage.getItem(QUALITY_COLLECTION_KEYS.quality_checklists) === null){
+    saveCollection('quality_checklists', JSON.parse(JSON.stringify(CHECKLIST_SEED)));
+  }
+  if(localStorage.getItem(QUALITY_COLLECTION_KEYS.quality_documents) === null){
+    saveCollection('quality_documents', JSON.parse(JSON.stringify(DOCUMENT_SEED)));
+  }
+  if(localStorage.getItem(QUALITY_SETTINGS_KEY) === null){
+    saveQualitySettings(DEFAULT_QUALITY_SETTINGS);
   }
 }
 
@@ -614,6 +964,9 @@ function evidenceEntityExists(entityType, entityId){
   if(entityType === 'non_conformance'){
     return loadCollection('non_conformances').some(nc => nc.non_conformance_id === entityId);
   }
+  if(entityType === 'corrective_action'){
+    return loadCollection('corrective_actions').some(a => a.corrective_action_id === entityId);
+  }
   return false;
 }
 
@@ -622,7 +975,7 @@ export function validateEvidence(payload, options = {}){
   const entityType = payload && payload.entity_type;
   const entityId = payload && payload.entity_id;
   if(!EVIDENCE_ENTITY_TYPES.includes(entityType)){
-    errors.entity_type = 'El tipo de vínculo debe ser inspection o non_conformance';
+    errors.entity_type = 'El tipo de vínculo debe ser inspection, non_conformance o corrective_action';
   }
   if(isBlank(entityId)){
     errors.entity_id = 'El registro vinculado es obligatorio';
@@ -947,8 +1300,8 @@ export function validateInspectionPlan(plan){
   } else if(!loadExternal('products').some(p => p.product_id === plan.product_id)){
     errors.product_id = 'El producto seleccionado no existe';
   }
-  if(!APPLICABLE_STAGES.includes(plan && plan.applicable_stage)){
-    errors.applicable_stage = 'La etapa debe ser incoming, in_process o final';
+  if(!qualityCatalogKeys('inspection_categories').includes(plan && plan.applicable_stage)){
+    errors.applicable_stage = 'Seleccione una categoría de inspección configurada';
   }
   return { valid: Object.keys(errors).length === 0, errors };
 }
@@ -1155,7 +1508,8 @@ export function addInspection(payload){
   const check = validateInspection(payload);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const now = new Date().toISOString();
-  const status = payload.inspection_status === 'completed' ? 'completed' : 'draft';
+  const allowedStatuses = qualityCatalogKeys('inspection_statuses');
+  const status = allowedStatuses.includes(payload.inspection_status) ? payload.inspection_status : 'draft';
   const inspection = {
     id: generateId(),
     inspection_id: generateId(),
@@ -1272,7 +1626,7 @@ export function completeInspection(id, overallResult, results){
     inspection_status: 'completed',
     overall_result: overallResult
   });
-  if(overallResult === 'failed'){
+  if(overallResult === 'failed' && qualityParameter('auto_create_nc_on_failure')){
     createNonConformanceFromInspection(inspection.inspection_id);
   }
   return { inspection, results: saved };
@@ -1288,8 +1642,8 @@ export function validateNonConformance(nc){
   const errors = {};
   if(!nc || isBlank(nc.description)) errors.description = 'La descripción es obligatoria';
   if(!DEFECT_TYPES.includes(nc && nc.defect_type)) errors.defect_type = 'Tipo de defecto inválido';
-  if(!SEVERITIES.includes(nc && nc.severity)) errors.severity = 'Severidad inválida';
-  if(!NON_CONFORMANCE_STATUSES.includes(nc && nc.status)) errors.status = 'Estado de no conformidad inválido';
+  if(!qualityCatalogKeys('severity_levels').includes(nc && nc.severity)) errors.severity = 'Seleccione una gravedad configurada';
+  if(!qualityCatalogKeys('nc_statuses').includes(nc && nc.status)) errors.status = 'Seleccione un estado configurado';
   if(isBlank(nc && nc.product_id)) errors.product_id = 'El producto es obligatorio';
   return { valid: Object.keys(errors).length === 0, errors };
 }
@@ -1313,6 +1667,9 @@ export function addNonConformance(payload){
     defect_type: payload.defect_type,
     severity: payload.severity,
     status: payload.status,
+    detected_date: String(payload.detected_date || now.slice(0, 10)).slice(0, 10),
+    responsible_employee_id: payload.responsible_employee_id || undefined,
+    observations: String(payload.observations || '').trim(),
     createdAt: now,
     updatedAt: now
   };
@@ -1346,6 +1703,9 @@ export function updateNonConformance(id, updates){
     defect_type: merged.defect_type,
     severity: merged.severity,
     status: merged.status,
+    detected_date: String(merged.detected_date || previous.detected_date || new Date().toISOString().slice(0, 10)).slice(0, 10),
+    responsible_employee_id: merged.responsible_employee_id || previous.responsible_employee_id || undefined,
+    observations: String(merged.observations || '').trim(),
     updatedAt: new Date().toISOString()
   };
   saveCollection('non_conformances', list);
@@ -1401,6 +1761,7 @@ export function deleteNonConformance(id){
 export function createNonConformanceFromInspection(inspectionId){
   const existing = loadCollection('non_conformances').find(nc => nc.inspection_id === inspectionId);
   if(existing) return existing;
+  const params = loadQualitySettings().parameters;
   const inspection = loadCollection('quality_inspections').find(i => i.inspection_id === inspectionId);
   if(!inspection) throw new Error('Inspección no encontrada');
   const plan = loadCollection('quality_inspection_plans').find(p => p.inspection_plan_id === inspection.inspection_plan_id);
@@ -1417,13 +1778,33 @@ export function createNonConformanceFromInspection(inspectionId){
     product_id: plan ? plan.product_id : null,
     description,
     defect_type: 'other',
-    severity: 'major',
-    status: 'open'
+    severity: params.default_nc_severity,
+    status: params.default_nc_status,
+    detected_date: inspection.inspection_date
   });
+}
+
+function defaultActionProgress(status){
+  if(status === 'completed') return 100;
+  if(status === 'in_progress') return 50;
+  return 0;
+}
+
+function normalizeActionProgress(value, status){
+  const numeric = Number(value === undefined || value === null || value === '' ? defaultActionProgress(status) : value);
+  if(!Number.isFinite(numeric)) return defaultActionProgress(status);
+  return Math.max(0, Math.min(100, Math.round(numeric)));
 }
 
 export function validateCorrectiveAction(action){
   const errors = {};
+  if(action && action.action_category !== undefined && !qualityCatalogKeys('action_types').includes(action.action_category)){
+    errors.action_category = 'Seleccione un tipo de acción configurado';
+  }
+  if(action && action.progress !== undefined && action.progress !== ''
+    && (!Number.isFinite(Number(action.progress)) || Number(action.progress) < 0 || Number(action.progress) > 100)){
+    errors.progress = 'El avance debe estar entre 0 y 100';
+  }
   if(isBlank(action && action.responsible_employee_id)){
     errors.responsible_employee_id = 'El responsable es obligatorio';
   } else if(!loadExternal('employees').some(e => e.employee_id === action.responsible_employee_id)){
@@ -1450,10 +1831,15 @@ export function addCorrectiveAction(payload){
     reference_module: lot.reference_module,
     reference_id: lot.reference_id,
     responsible_employee_id: payload.responsible_employee_id,
+    action_category: payload.action_category || 'corrective',
     action_description: String(payload.action_description).trim(),
     root_cause: String(payload.root_cause).trim(),
     action_type: payload.action_type,
+    start_date: String(payload.start_date || now.slice(0, 10)).slice(0, 10),
     due_date: payload.due_date,
+    expected_result: String(payload.expected_result || '').trim(),
+    observations: String(payload.observations || '').trim(),
+    progress: normalizeActionProgress(payload.progress, payload.status),
     status: payload.status,
     completed_at: payload.status === 'completed' ? now : undefined,
     createdAt: now,
@@ -1488,10 +1874,19 @@ export function updateCorrectiveAction(id, updates){
   list[idx] = {
     ...previous,
     responsible_employee_id: merged.responsible_employee_id,
+    action_category: merged.action_category || previous.action_category || 'corrective',
     action_description: String(merged.action_description).trim(),
     root_cause: String(merged.root_cause).trim(),
     action_type: merged.action_type,
+    start_date: String(merged.start_date || previous.start_date || now.slice(0, 10)).slice(0, 10),
     due_date: merged.due_date,
+    expected_result: String(merged.expected_result || '').trim(),
+    observations: String(merged.observations || '').trim(),
+    progress: merged.progress !== undefined && merged.progress !== ''
+      ? normalizeActionProgress(merged.progress, merged.status)
+      : (merged.status === 'completed'
+        ? 100
+        : normalizeActionProgress(previous.progress, merged.status)),
     status: merged.status,
     completed_at: completing ? now : previous.completed_at,
     updatedAt: now
@@ -1514,6 +1909,7 @@ export function deleteCorrectiveAction(id){
   if(!action) throw new Error('Acción CAPA no encontrada');
   const next = list.filter(a => a.id !== action.id);
   saveCollection('corrective_actions', next);
+  deleteEvidenceFor('corrective_action', action.corrective_action_id);
   recordAudit({
     entityType: 'corrective_action',
     entityId: action.corrective_action_id,
@@ -1575,6 +1971,213 @@ export function overrideInspection(inspectionId, targetResult, justification, ov
   });
 }
 
+export function loadChecklists(){
+  return loadCollection('quality_checklists');
+}
+
+export function validateChecklist(payload){
+  const errors = {};
+  if(isBlank(payload && payload.name)) errors.name = 'El nombre es obligatorio';
+  if(isBlank(payload && payload.category)) errors.category = 'La categoría es obligatoria';
+  if(!Array.isArray(payload && payload.criteria) || payload.criteria.length === 0){
+    errors.criteria = 'Agrega al menos un criterio';
+  }
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
+function normalizeChecklistCriteria(criteria){
+  const now = new Date().toISOString();
+  return criteria.map(criterion => ({
+    id: criterion.id || generateId(),
+    criteria_id: criterion.criteria_id || criterion.id || generateId(),
+    name: String(criterion.name).trim(),
+    description: String(criterion.description || '').trim(),
+    is_critical: Boolean(criterion.is_critical),
+    createdAt: criterion.createdAt || now
+  }));
+}
+
+export function addChecklist(payload){
+  const check = validateChecklist(payload);
+  if(!check.valid) throw new Error(Object.values(check.errors)[0]);
+  const now = new Date().toISOString();
+  const checklist = {
+    id: generateId(),
+    checklist_id: generateId(),
+    name: String(payload.name).trim(),
+    description: String(payload.description || '').trim(),
+    category: String(payload.category).trim(),
+    status: payload.status === 'draft' || payload.status === 'archived' ? payload.status : 'active',
+    createdAt: now,
+    updatedAt: now,
+    criteria: normalizeChecklistCriteria(payload.criteria),
+    evaluations: []
+  };
+  const list = loadCollection('quality_checklists');
+  list.push(checklist);
+  saveCollection('quality_checklists', list);
+  return checklist;
+}
+
+export function updateChecklist(id, updates){
+  const list = loadCollection('quality_checklists');
+  const idx = list.findIndex(item => item.id === id || item.checklist_id === id);
+  if(idx === -1) throw new Error('Lista de verificación no encontrada');
+  const previous = list[idx];
+  const merged = { ...previous, ...updates };
+  const check = validateChecklist(merged);
+  if(!check.valid) throw new Error(Object.values(check.errors)[0]);
+  list[idx] = {
+    ...previous,
+    name: String(merged.name).trim(),
+    description: String(merged.description || '').trim(),
+    category: String(merged.category).trim(),
+    status: merged.status === 'draft' || merged.status === 'archived' ? merged.status : 'active',
+    criteria: normalizeChecklistCriteria(merged.criteria),
+    updatedAt: new Date().toISOString()
+  };
+  saveCollection('quality_checklists', list);
+  return list[idx];
+}
+
+export function deleteChecklist(id){
+  const list = loadCollection('quality_checklists');
+  const next = list.filter(item => item.id !== id && item.checklist_id !== id);
+  if(next.length === list.length) throw new Error('Lista de verificación no encontrada');
+  saveCollection('quality_checklists', next);
+  return true;
+}
+
+export function addChecklistEvaluation(id, evaluation){
+  const list = loadCollection('quality_checklists');
+  const idx = list.findIndex(item => item.id === id || item.checklist_id === id);
+  if(idx === -1) throw new Error('Lista de verificación no encontrada');
+  const fallbackDate = new Date().toISOString().slice(0, 10);
+  const record = {
+    evaluation_id: generateId(),
+    date: String(evaluation.date || fallbackDate).slice(0, 10),
+    results: Array.isArray(evaluation.results) ? evaluation.results : [],
+    summary: evaluation.summary || {},
+    createdAt: new Date().toISOString()
+  };
+  list[idx].evaluations = [...(list[idx].evaluations || []), record];
+  list[idx].updatedAt = new Date().toISOString();
+  saveCollection('quality_checklists', list);
+  return record;
+}
+
+export function loadQualityDocuments(){
+  return loadCollection('quality_documents');
+}
+
+function qualityDocumentFileErrors(doc, errors, required){
+  const hasFile = Boolean(doc && doc.file_name);
+  if(required && !hasFile){
+    errors.file_name = 'El archivo es obligatorio';
+    return;
+  }
+  if(!hasFile) return;
+  if(!QUALITY_DOCUMENT_MIME_TYPES.includes(doc.mime_type)){
+    errors.mime_type = 'El archivo debe ser PNG, JPG o PDF';
+  }
+  const size = Number(doc.size_bytes);
+  if(!Number.isFinite(size) || size <= 0){
+    errors.size_bytes = 'El tamaño del archivo debe ser mayor que cero';
+  }else if(size > QUALITY_DOCUMENT_MAX_FILE_BYTES){
+    errors.size_bytes = 'El archivo supera el límite de 10 MB';
+  }
+  const dataUrl = doc.data_url;
+  if(typeof dataUrl !== 'string' || !dataUrl.startsWith('data:') || !dataUrl.includes(';base64,')){
+    errors.data_url = 'El contenido del archivo no es válido';
+  }else if(doc.mime_type && !dataUrl.startsWith(`data:${doc.mime_type};base64,`)){
+    errors.data_url = 'El contenido no coincide con el tipo de archivo';
+  }
+}
+
+export function validateQualityDocument(doc, options = {}){
+  const errors = {};
+  if(isBlank(doc && doc.name)) errors.name = 'El nombre del documento es obligatorio';
+  if(!QUALITY_DOCUMENT_CATEGORIES.includes(doc && doc.category)) errors.category = 'La categoría no es válida';
+  if(!QUALITY_DOCUMENT_STATUSES.includes(doc && doc.status)) errors.status = 'El estado no es válido';
+  if(isBlank(doc && doc.responsible_employee_id)){
+    errors.responsible_employee_id = 'El responsable es obligatorio';
+  }else if(!loadExternal('employees').some(e => e.employee_id === doc.responsible_employee_id)){
+    errors.responsible_employee_id = 'El responsable seleccionado no existe';
+  }
+  qualityDocumentFileErrors(doc, errors, options.requireFile !== false);
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
+function nextQualityDocumentId(list){
+  const max = list.reduce((acc, doc) => {
+    const numeric = Number(String(doc.document_id || '').replace(/\D/g, ''));
+    return Number.isFinite(numeric) ? Math.max(acc, numeric) : acc;
+  }, 0);
+  return `DOC-${String(max + 1).padStart(3, '0')}`;
+}
+
+export function addQualityDocument(payload){
+  const check = validateQualityDocument(payload);
+  if(!check.valid) throw new Error(Object.values(check.errors)[0]);
+  const list = loadQualityDocuments();
+  const now = new Date().toISOString();
+  const doc = {
+    id: generateId(),
+    document_id: nextQualityDocumentId(list),
+    name: String(payload.name).trim(),
+    category: payload.category,
+    description: String(payload.description || '').trim(),
+    file_name: String(payload.file_name).trim(),
+    mime_type: payload.mime_type,
+    size_bytes: Number(payload.size_bytes),
+    data_url: payload.data_url,
+    responsible_employee_id: payload.responsible_employee_id,
+    status: payload.status,
+    uploaded_at: now,
+    updated_at: now,
+    version: 1
+  };
+  list.push(doc);
+  saveCollection('quality_documents', list);
+  return doc;
+}
+
+export function updateQualityDocument(id, updates){
+  const list = loadQualityDocuments();
+  const idx = list.findIndex(doc => doc.id === id || doc.document_id === id);
+  if(idx === -1) throw new Error('Documento no encontrado');
+  const previous = list[idx];
+  const merged = { ...previous, ...updates };
+  const check = validateQualityDocument(merged, { requireFile: false });
+  if(!check.valid) throw new Error(Object.values(check.errors)[0]);
+  const now = new Date().toISOString();
+  list[idx] = {
+    ...previous,
+    name: String(merged.name).trim(),
+    category: merged.category,
+    description: String(merged.description || '').trim(),
+    file_name: merged.file_name || previous.file_name,
+    mime_type: merged.mime_type || previous.mime_type,
+    size_bytes: Number(merged.size_bytes || previous.size_bytes),
+    data_url: merged.data_url || previous.data_url,
+    responsible_employee_id: merged.responsible_employee_id,
+    status: merged.status,
+    updated_at: now,
+    version: (Number(previous.version) || 1) + 1
+  };
+  saveCollection('quality_documents', list);
+  return list[idx];
+}
+
+export function deleteQualityDocument(id){
+  const list = loadQualityDocuments();
+  const doc = list.find(item => item.id === id || item.document_id === id);
+  if(!doc) throw new Error('Documento no encontrado');
+  saveCollection('quality_documents', list.filter(item => item.id !== doc.id));
+  return true;
+}
+
 export function clearQualityData(){
   Object.keys(QUALITY_COLLECTION_KEYS).forEach(name => saveCollection(name, []));
+  localStorage.removeItem(QUALITY_SETTINGS_KEY);
 }

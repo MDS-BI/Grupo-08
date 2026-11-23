@@ -9,8 +9,13 @@ import { renderDashboard, renderQualityDashboard, initQualityAlerts } from './co
 import { setupSearchBar, renderSearchResults } from './components/search-bar.js';
 import { renderPendingLots, initPendingLots } from './components/pending-lots.js';
 import { renderPlanConfig, initPlanConfig, clearPlanForm, clearCriterionForm } from './components/quality-plan-config.js';
+import { renderChecklists, initChecklistManager, clearChecklistForm } from './components/checklist-manager.js';
 import { renderInspectionView, initInspectionEngine, startInspection, resetInspectionForm } from './components/inspection-engine.js';
 import { renderNonConformance, initNonConformanceCapa, clearNcForm, clearCapaForm } from './components/non-conformance-capa.js';
+import { renderCapaManager, initCapaManager, clearCapaManagerForm } from './components/capa-manager.js';
+import { renderQualityDocuments, initQualityDocumentManager, clearQualityDocumentForm } from './components/quality-document-manager.js';
+import { renderQualityReports, initQualityReports } from './components/quality-reports.js';
+import { renderQualitySettings, initQualitySettings } from './components/quality-settings.js';
 import { renderHistory, initInspectionHistory } from './components/inspection-history.js';
 import { renderAuditLog, initAuditLog } from './components/quality-audit-log.js';
 
@@ -37,8 +42,13 @@ const QUALITY_VIEWS = {
   'quality-dashboard': 'view-quality-dashboard',
   'pending-lots': 'view-pending-lots',
   'quality-plans': 'view-quality-plans',
+  'quality-checklists': 'view-quality-checklists',
   inspections: 'view-inspections',
   'non-conformance': 'view-non-conformance',
+  'corrective-actions': 'view-corrective-actions',
+  'quality-documents': 'view-quality-documents',
+  'quality-reports': 'view-quality-reports',
+  'quality-settings': 'view-quality-settings',
   'quality-history': 'view-quality-history',
   'quality-audit-log': 'view-quality-audit-log'
 };
@@ -74,11 +84,16 @@ function showQuality(name, opts = {}){
   if(name === 'quality-dashboard') renderQualityDashboard();
   if(name === 'pending-lots') renderPendingLots();
   if(name === 'quality-plans') renderPlanConfig();
+  if(name === 'quality-checklists') renderChecklists();
   if(name === 'inspections'){
     if(opts.referenceModule && opts.referenceId) startInspection(opts.referenceModule, opts.referenceId);
     else renderInspectionView();
   }
   if(name === 'non-conformance') renderNonConformance();
+  if(name === 'corrective-actions') renderCapaManager();
+  if(name === 'quality-documents') renderQualityDocuments();
+  if(name === 'quality-reports') renderQualityReports();
+  if(name === 'quality-settings') renderQualitySettings();
   if(name === 'quality-history') renderHistory();
   if(name === 'quality-audit-log') renderAuditLog();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -327,8 +342,13 @@ function wireEvents(){
   });
   initQualityAlerts();
   initPlanConfig();
+  initChecklistManager();
   initInspectionEngine();
   initNonConformanceCapa();
+  initCapaManager();
+  initQualityDocumentManager();
+  initQualityReports();
+  initQualitySettings();
   initInspectionHistory();
   initAuditLog();
 }
@@ -345,8 +365,11 @@ export function initApp(resolved){
   clearDocumentForm();
   clearPlanForm();
   clearCriterionForm();
+  clearChecklistForm();
   clearNcForm();
   clearCapaForm();
+  clearCapaManagerForm();
+  clearQualityDocumentForm();
   resetInspectionForm();
   showModule('dashboard');
 }

@@ -7,7 +7,8 @@ import {
   loadCollection,
   saveCollection,
   externalDocuments,
-  derivePendingLots
+  derivePendingLots,
+  addSettingItem
 } from '../../src/storage.js';
 import { bootQualityApp, qs } from '../support/quality-dom.js';
 
@@ -74,6 +75,24 @@ describe('User Story 2 - pending lots and automatic evaluation', () => {
     button.click();
     const options = [...qs('inspection-plan').options].map(option => option.value).filter(Boolean);
     expect(options).toEqual([matching.inspection_plan_id]);
+  });
+
+  it('offers plans that use custom inspection categories from settings', () => {
+    addSettingItem('inspection_categories', { key: 'cold_chain', label: 'Cadena de frío' });
+    const plan = makePlan([{}], { plan_name: 'Plan cadena de frío', applicable_stage: 'cold_chain' });
+
+    qs('nav-quality-inspections').click();
+    qs('inspection-module').value = 'goods_receipt';
+    qs('inspection-module').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    qs('inspection-reference').value = 'gr-001';
+    qs('inspection-reference').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
+    expect([...qs('inspection-stage').options].some(option => option.value === 'cold_chain')).toBe(true);
+    qs('inspection-stage').value = 'cold_chain';
+    qs('inspection-stage').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
+    const options = [...qs('inspection-plan').options].map(option => option.value).filter(Boolean);
+    expect(options).toEqual([plan.inspection_plan_id]);
   });
 
   it('resumes the existing draft instead of duplicating it (FR-036)', () => {

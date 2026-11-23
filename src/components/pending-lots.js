@@ -10,8 +10,14 @@ export function renderPendingLots(){
   const empty = qs('pending-lots-empty');
   if(!tbody) return [];
   tbody.innerHTML = '';
-  const rows = pendingLotsRows();
   const maps = buildReferenceMaps();
+  const searchInput = qs('pending-lots-search');
+  const search = searchInput ? searchInput.value.trim().toLowerCase() : '';
+  const rows = pendingLotsRows().filter(doc => {
+    if(!search) return true;
+    return [doc.reference_id, moduleLabel(doc.reference_module), productName(maps, doc.product_id), doc.date]
+      .join(' ').toLowerCase().includes(search);
+  });
 
   rows.forEach(doc => {
     const tr = document.createElement('tr');
@@ -37,11 +43,21 @@ export function renderPendingLots(){
     tbody.appendChild(tr);
   });
 
-  if(empty) empty.hidden = rows.length > 0;
+  if(empty){
+    empty.hidden = rows.length > 0;
+    empty.textContent = search
+      ? 'Ningún lote coincide con la búsqueda.'
+      : 'No hay lotes pendientes: todos los documentos origen tienen inspección completada.';
+  }
   return rows;
 }
 
 export function initPendingLots({ onInspect } = {}){
+  const searchInput = qs('pending-lots-search');
+  if(searchInput && searchInput.dataset.wired !== 'true'){
+    searchInput.dataset.wired = 'true';
+    searchInput.addEventListener('input', () => renderPendingLots());
+  }
   const tbody = qs('pending-lots-body');
   if(!tbody || tbody.dataset.wired === 'true') return;
   tbody.dataset.wired = 'true';

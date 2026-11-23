@@ -1,4 +1,4 @@
-import { loadCollection, loadExternal } from '../storage.js';
+import { loadCollection, loadExternal, qualityCatalogLabels } from '../storage.js';
 
 export function qs(id){ return document.getElementById(id); }
 
@@ -38,7 +38,7 @@ export function moduleLabel(module){
 }
 
 export function stageLabel(stage){
-  return STAGE_LABELS[stage] || stage || '';
+  return qualityCatalogLabels('inspection_categories')[stage] || STAGE_LABELS[stage] || stage || '';
 }
 
 export function resultLabel(result){
@@ -46,7 +46,7 @@ export function resultLabel(result){
 }
 
 export function statusLabel(status){
-  return STATUS_LABELS[status] || status || '';
+  return qualityCatalogLabels('inspection_statuses')[status] || STATUS_LABELS[status] || status || '';
 }
 
 export function todayIso(){

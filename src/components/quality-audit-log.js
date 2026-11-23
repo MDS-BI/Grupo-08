@@ -76,11 +76,29 @@ export function renderAuditLog(filters = null){
     if(error) error.textContent = err.message;
     return [];
   }
+  const searchInput = qs('audit-log-search');
+  const search = searchInput ? searchInput.value.trim().toLowerCase() : '';
+  if(search){
+    entries = entries.filter(entry => [
+      ENTITY_LABELS[entry.entity_type] || entry.entity_type,
+      entry.entity_id,
+      auditReferenceLabel(entry),
+      ACTION_LABELS[entry.action] || entry.action,
+      entry.changed_field,
+      auditValue(entry.before_value),
+      auditValue(entry.after_value),
+      entry.actor,
+      entry.timestamp,
+      auditValue(entry.justification)
+    ].join(' ').toLowerCase().includes(search));
+  }
   body.innerHTML = '';
   if(entries.length === 0){
     body.hidden = true;
     empty.hidden = false;
-    empty.textContent = 'No hay entradas de bitácora para los filtros seleccionados.';
+    empty.textContent = search
+      ? 'Ninguna entrada coincide con la búsqueda.'
+      : 'No hay entradas de bitácora para los filtros seleccionados.';
     return entries;
   }
   body.hidden = false;
@@ -136,6 +154,8 @@ export function resetAuditFilters(){
     const el = qs(idMap[key]);
     if(el) el.value = value;
   });
+  const search = qs('audit-log-search');
+  if(search) search.value = '';
   return renderAuditLog(filters);
 }
 
@@ -149,6 +169,8 @@ export function initAuditLog(){
   });
   const clearButton = qs('audit-filter-clear');
   if(clearButton) clearButton.addEventListener('click', () => resetAuditFilters());
+  const search = qs('audit-log-search');
+  if(search) search.addEventListener('input', () => applyAuditFilters());
   renderAuditLog();
 }
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   ensureSeedData,
   addPlan,
@@ -7,6 +7,7 @@ import {
   completeInspection,
   addCorrectiveAction,
   updateCorrectiveAction,
+  evidenceFor,
   loadCollection
 } from '../../src/storage.js';
 import { bootQualityApp, qs, submit } from '../support/quality-dom.js';
@@ -67,6 +68,7 @@ describe('User Story 3 - non-conformances and CAPA', () => {
     expect(ncs.length).toBe(1);
     expect(qs('nc-list').textContent).toContain('Peso');
     expect(qs('nc-list').textContent).toContain('other');
+    expect(qs('nc-list').querySelector('.table-scroll table.nc-table')).not.toBeNull();
     expect(qs('quarantine-body').textContent).toContain('Cuarentena');
   });
 
@@ -145,5 +147,65 @@ describe('User Story 3 - non-conformances and CAPA', () => {
     expect(loadCollection('non_conformances').length).toBe(0);
     expect(qs('review-body').querySelectorAll('tr').length).toBe(1);
     expect(qs('review-empty').hidden).toBe(true);
+  });
+
+  it('renders the redesigned workspace with summary, filters and severity columns', () => {
+    createFailedInspection();
+    qs('nav-quality-nc').click();
+
+    expect(qs('nc-heading').textContent).toBe('Gestión de No Conformidades');
+    expect(qs('nc-create').textContent).toContain('Registrar no conformidad');
+    expect(qs('nc-summary').textContent).toContain('Total de no conformidades');
+    expect(qs('nc-summary').textContent).toContain('Abiertas');
+    expect(qs('nc-summary').textContent).toContain('Solucionadas');
+    expect(qs('nc-list').textContent).toContain('Nivel de gravedad');
+    expect(qs('nc-list').textContent).toContain('Media');
+    expect(qs('nc-result-count').textContent).toContain('1 de 1');
+  });
+
+  it('registers a non-conformance from the form and opens its tracking detail', async () => {
+    qs('nav-quality-nc').click();
+    qs('nc-create').click();
+    expect(qs('nc-form-card').hidden).toBe(false);
+
+    qs('nc-description').value = 'Etiqueta ilegible en el empaque';
+    qs('nc-defect').value = 'packaging';
+    qs('nc-severity').value = 'critical';
+    qs('nc-detected-date').value = '2026-11-20';
+    qs('nc-responsible').value = 'emp-001';
+    qs('nc-observations').value = 'Revisar al proveedor';
+    const file = new dom.window.File([new Uint8Array([1, 2, 3])], 'evidencia.png', { type: 'image/png' });
+    Object.defineProperty(qs('nc-files'), 'files', { value: [file], configurable: true });
+    qs('nc-form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+
+    await vi.waitFor(() => {
+      expect(qs('nc-detail-card').hidden).toBe(false);
+    });
+    const nc = loadCollection('non_conformances')[0];
+    expect(nc.detected_date).toBe('2026-11-20');
+    expect(nc.responsible_employee_id).toBe('emp-001');
+    expect(nc.observations).toBe('Revisar al proveedor');
+    expect(evidenceFor('non_conformance', nc.non_conformance_id).length).toBe(1);
+    expect(qs('nc-detail-body').textContent).toContain('Historial de seguimiento');
+    expect(qs('nc-detail-body').textContent).toContain('Registro creado');
+    expect(qs('nc-detail-body').textContent).toContain('evidencia.png');
+    expect(qs('nc-detail-body').textContent).toContain('Alta');
+  });
+
+  it('filters by severity and opens the detail from the table', () => {
+    createFailedInspection();
+    qs('nav-quality-nc').click();
+
+    qs('nc-severity-filter').value = 'critical';
+    qs('nc-severity-filter').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    expect(qs('nc-empty').hidden).toBe(false);
+
+    qs('nc-severity-filter').value = 'major';
+    qs('nc-severity-filter').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    expect(qs('nc-list').textContent).toContain('Peso');
+    qs('nc-list').querySelector('button[data-nc-detail]').click();
+    expect(qs('nc-detail-card').hidden).toBe(false);
+    expect(qs('nc-detail-body').textContent).toContain('Peso');
+    expect(qs('nc-detail-body').textContent).toContain('Acciones correctivas');
   });
 });

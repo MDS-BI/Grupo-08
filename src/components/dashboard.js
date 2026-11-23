@@ -469,6 +469,122 @@ function renderNcBySeverity(metrics){
     container.appendChild(badge);
     container.appendChild(document.createTextNode(' '));
   });
+  const bars = document.createElement('div');
+  bars.className = 'severity-bars';
+  const max = Math.max(1, ...entries.map(([, count]) => count));
+  const keys = ['critical', 'major', 'minor'];
+  entries.forEach(([label, count], index) => {
+    const row = document.createElement('div');
+    row.className = 'severity-bar-row';
+    row.dataset.severity = keys[index];
+    const name = document.createElement('span');
+    name.textContent = label;
+    const track = document.createElement('span');
+    track.className = 'severity-bar-track';
+    const fill = document.createElement('span');
+    fill.className = 'severity-bar-fill';
+    fill.style.width = `${Math.round((count / max) * 100)}%`;
+    track.appendChild(fill);
+    const value = document.createElement('strong');
+    value.textContent = String(count);
+    row.append(name, track, value);
+    bars.appendChild(row);
+  });
+  container.appendChild(bars);
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function svgNode(name, attributes){
+  const node = document.createElementNS(SVG_NS, name);
+  Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, String(value)));
+  return node;
+}
+
+function renderTrendChart(metrics){
+  const container = qs('quality-trend');
+  if(!container) return;
+  if(metrics.completed.length === 0){
+    clearAndMessage(container, 'Sin inspecciones completadas para mostrar la tendencia.');
+    return;
+  }
+  resetContainer(container);
+  const today = new Date(`${todayIso()}T00:00:00`);
+  const months = [];
+  for(let offset = 5; offset >= 0; offset -= 1){
+    const date = new Date(today.getFullYear(), today.getMonth() - offset, 1);
+    months.push({
+      key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+      label: date.toLocaleString('es', { month: 'short' }).replace('.', '')
+    });
+  }
+  const counts = months.map(month => metrics.completed.filter(inspection =>
+    String(inspection.inspection_date || '').slice(0, 7) === month.key).length);
+  const max = Math.max(1, ...counts);
+  const left = 28;
+  const right = 330;
+  const top = 12;
+  const bottom = 110;
+  const xFor = index => left + (index * (right - left)) / (months.length - 1);
+  const yFor = value => bottom - (value / max) * (bottom - top);
+
+  const svg = svgNode('svg', { viewBox: '0 0 340 140', role: 'img', 'aria-label': 'Inspecciones completadas por mes en los últimos seis meses' });
+  const defs = svgNode('defs', {});
+  const gradient = svgNode('linearGradient', { id: 'trendFill', x1: '0', y1: '0', x2: '0', y2: '1' });
+  gradient.appendChild(svgNode('stop', { offset: '0%', 'stop-color': '#93c5fd', 'stop-opacity': '0.55' }));
+  gradient.appendChild(svgNode('stop', { offset: '100%', 'stop-color': '#93c5fd', 'stop-opacity': '0' }));
+  defs.appendChild(gradient);
+  svg.appendChild(defs);
+
+  [max, Math.round(max / 2), 0].forEach((value, index) => {
+    const y = top + (index * (bottom - top)) / 2;
+    svg.appendChild(svgNode('line', { x1: left, y1: y, x2: right, y2: y, class: 'grid-line' }));
+    const label = svgNode('text', { x: 20, y: y + 3, class: 'axis-label', 'text-anchor': 'end' });
+    label.textContent = String(value);
+    svg.appendChild(label);
+  });
+
+  const points = counts.map((value, index) => `${xFor(index)},${yFor(value)}`).join(' ');
+  svg.appendChild(svgNode('polygon', {
+    points: `${left},${bottom} ${points} ${right},${bottom}`,
+    class: 'trend-area'
+  }));
+  svg.appendChild(svgNode('polyline', { points, class: 'trend-line' }));
+
+  counts.forEach((value, index) => {
+    svg.appendChild(svgNode('circle', { cx: xFor(index), cy: yFor(value), r: 3.5, class: 'trend-dot' }));
+    const label = svgNode('text', {
+      x: xFor(index),
+      y: 128,
+      class: 'axis-label',
+      'text-anchor': 'middle'
+    });
+    label.textContent = months[index].label;
+    svg.appendChild(label);
+  });
+  container.appendChild(svg);
+}
+
+function renderVerdictDistribution(metrics){
+  const donut = qs('quality-verdict-donut');
+  if(!donut) return;
+  const total = metrics.completed.length;
+  const passed = metrics.completed.filter(i => i.overall_result === 'passed').length;
+  const conditional = metrics.completed.filter(i => i.overall_result === 'conditional').length;
+  const failed = metrics.completed.filter(i => i.overall_result === 'failed').length;
+  setKpi('quality-donut-total', String(total));
+  setKpi('quality-verdict-passed', String(passed));
+  setKpi('quality-verdict-conditional', String(conditional));
+  setKpi('quality-verdict-failed', String(failed));
+  if(total){
+    const first = (passed / total) * 100;
+    const second = ((passed + conditional) / total) * 100;
+    donut.style.background = `conic-gradient(#16a34a 0% ${first}%, #f59e0b ${first}% ${second}%, #dc2626 ${second}% 100%)`;
+    donut.setAttribute('aria-label', `Aprobadas: ${passed}, condicionales: ${conditional}, reprobadas: ${failed}`);
+  } else {
+    donut.style.background = '#e9eef7';
+    donut.setAttribute('aria-label', 'Sin inspecciones completadas');
+  }
 }
 
 export function renderQualityDashboard(){
@@ -491,6 +607,8 @@ export function renderQualityDashboard(){
 
   renderApprovalByStage(metrics);
   renderNcBySeverity(metrics);
+  renderVerdictDistribution(metrics);
+  renderTrendChart(metrics);
   renderAlerts(metrics);
   renderAlertRules();
 
@@ -510,6 +628,16 @@ export function renderQualityDashboard(){
 
   const detail = qs('quality-inspector-detail');
   const role = roleSelect ? roleSelect.value : 'jefe_calidad';
+  const ROLE_META = {
+    jefe_calidad: { label: 'Jefe de Calidad', initials: 'JC' },
+    inspector: { label: 'Inspector de Calidad', initials: 'IN' },
+    gerente: { label: 'Gerente de Operaciones', initials: 'GO' }
+  };
+  const meta = ROLE_META[role] || ROLE_META.jefe_calidad;
+  const topbarRole = qs('topbar-role');
+  const topbarAvatar = qs('topbar-avatar');
+  if(topbarRole) topbarRole.textContent = meta.label;
+  if(topbarAvatar) topbarAvatar.textContent = meta.initials;
   if(role !== 'jefe_calidad'){
     clearAndMessage(detail, 'El detalle individual por inspector está restringido al rol de Jefatura de Calidad. Se muestran solo métricas agregadas.');
     return metrics;
