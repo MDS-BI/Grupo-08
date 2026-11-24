@@ -33,7 +33,7 @@ describe('User Story 4 - manage entities and documents via the workspace sidebar
   it('shows a persistent module navigation with Dashboard, Entities, Documents, and Search buttons', () => {
     const buttons = [...document.querySelectorAll('.nav-module')];
     expect(buttons.length).toBe(4);
-    expect(buttons.map(b => b.dataset.module)).toEqual(['dashboard', 'entities', 'documents', 'search']);
+    expect(buttons.map(b => b.dataset.module)).toEqual(['dashboard', 'search', 'entities', 'documents']);
   });
 
   it('switches between the entities and documents management views', () => {
@@ -97,11 +97,11 @@ describe('User Story 4 - manage entities and documents via the workspace sidebar
     expect(loadDocuments().length).toBe(0);
   });
 
-  it('returns to the dashboard via the Dashboard module button', () => {
+  it('returns to the quality dashboard via the Dashboard module button', () => {
     qs('nav-entities').click();
-    expect(qs('view-dashboard').hidden).toBe(true);
-    qs('nav-dashboard').click();
-    expect(qs('view-dashboard').hidden).toBe(false);
+    expect(qs('view-quality-dashboard').hidden).toBe(true);
+    qs('quality-dashboard').click();
+    expect(qs('view-quality-dashboard').hidden).toBe(false);
     expect(qs('view-entities').hidden).toBe(true);
   });
 });

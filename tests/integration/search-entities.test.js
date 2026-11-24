@@ -88,7 +88,7 @@ describe('User Story 8 - search and find entities quickly', () => {
     qs('nav-search').click();
     expect(qs('search-empty').hidden).toBe(false);
     addEntity({ name: 'Later Entity', code: 'LT-9' });
-    qs('nav-dashboard').click();
+    qs('quality-dashboard').click();
     qs('nav-search').click();
     qs('search-input').value = 'later';
     qs('search-input').dispatchEvent(new dom.window.Event('input', { bubbles: true }));

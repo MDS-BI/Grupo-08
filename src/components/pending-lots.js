@@ -1,7 +1,7 @@
 import * as storage from '../storage.js';
 import { externalDocuments, loadCollection, derivePendingLots } from '../storage.js';
 import { buildReferenceMaps, productName, moduleLabel, qs, cell, actionButton } from './quality-utils.js';
-import { can, applyPermissionState } from '../permissions.js';
+import { applyPermissionState } from '../permissions.js';
 import { renderStatusBadge } from './status-badge.js';
 
 function activeRole(){
@@ -68,7 +68,7 @@ export function renderPendingLots(){
     if(state.disabled){
       button.disabled = true;
       button.dataset.stateDisabled = 'true';
-    }else if(can(activeRole(), 'execute_inspection')){
+    }else{
       button.dataset.permission = 'execute_inspection';
     }
     action.appendChild(button);

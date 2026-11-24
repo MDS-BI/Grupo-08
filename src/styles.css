@@ -120,6 +120,8 @@ h2 { font-size: 1.05rem; margin: 0 0 12px; }
   cursor: pointer;
 }
 
+.nav-module[hidden] { display: none; }
+
 .nav-module svg { flex-shrink: 0; }
 
 .nav-module:hover { background: rgba(255, 255, 255, 0.09); color: #ffffff; }

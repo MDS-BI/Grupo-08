@@ -17,7 +17,7 @@ import {
   loadCollection,
   saveCollection
 } from '../../src/storage.js';
-import { bootQualityApp, qs } from '../support/quality-dom.js';
+import { bootQualityApp, qs, setRole } from '../support/quality-dom.js';
 
 let dom;
 let plan;
@@ -141,6 +141,28 @@ describe('User Story 5 - quality dashboard', () => {
     expect(qs('quality-approval-by-stage').textContent).toContain('Sin inspecciones');
   });
 
+  it('unifies quick actions, record stats and charts, adapting priorities by role', () => {
+    expect(qs('view-quality-dashboard').hidden).toBe(false);
+    expect(qs('view-dashboard').hidden).toBe(true);
+    expect(qs('action-new-entity').closest('#view-quality-dashboard')).not.toBeNull();
+    expect(qs('stat-entities').closest('#view-quality-dashboard')).not.toBeNull();
+    expect(qs('quality-trend').closest('#view-quality-dashboard')).not.toBeNull();
+
+    setRole('gerente');
+    expect(qs('view-quality-dashboard').dataset.dashboardRole).toBe('gerente');
+    expect(qs('kpi-pending-documents').closest('.stat-card').hidden).toBe(true);
+    expect(qs('quality-pareto-product').closest('section').hidden).toBe(true);
+
+    setRole('inspector');
+    expect(qs('view-quality-dashboard').dataset.dashboardRole).toBe('inspector');
+    expect(qs('quality-summary-approvals').hidden).toBe(true);
+    expect(qs('quality-summary-inspections').hidden).toBe(false);
+
+    setRole('jefe_calidad');
+    expect(qs('view-quality-dashboard').dataset.dashboardRole).toBe('jefe_calidad');
+    expect(qs('kpi-pending-documents').closest('.stat-card').hidden).toBe(false);
+  });
+
   it('computes KPIs, CAPA effectiveness, pending inspections and Pareto', () => {
     setupPlan();
 
@@ -221,5 +243,53 @@ describe('User Story 5 - quality dashboard', () => {
     expect(qs('kpi-approval-rate').textContent).toBe('100%');
     expect(qs('kpi-pending-inspections').textContent).toBe('0');
     expect(elapsedMs).toBeLessThan(2000);
+  });
+
+  it('renders the organized dashboard with real-data compliance chart and role panel', () => {
+    setupPlan();
+    runInspection('gr-001', 'passed');
+    runInspection('gr-002', 'failed');
+
+    qs('quality-dashboard').click();
+
+    expect(document.querySelector('.dashboard-layout')).not.toBeNull();
+    expect(document.querySelector('.dashboard-main')).not.toBeNull();
+    expect(document.querySelector('.dashboard-side')).not.toBeNull();
+    expect(qs('quality-compliance-ring-value').textContent).toBe('50%');
+    expect(qs('quality-compliance-ring').style.background).toContain('conic-gradient');
+    expect(qs('quality-compliance-chip').textContent).toBe('1 de 2 aprobadas');
+    expect(qs('quality-role-summary').textContent).toContain('Supervisión de calidad');
+    expect(qs('quality-role-metrics').children).toHaveLength(3);
+    expect(qs('dashboard-role-icon').textContent).toBe('JC');
+  });
+
+  it('adapts the side panel to the active role', () => {
+    qs('quality-dashboard').click();
+    qs('quality-role').value = 'gerente';
+    qs('quality-role').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
+    expect(qs('quality-role-summary').textContent).toContain('Vista ejecutiva');
+    expect(qs('dashboard-role-icon').textContent).toBe('GO');
+
+    qs('quality-role').value = 'inspector';
+    qs('quality-role').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
+    expect(qs('quality-role-summary').textContent).toContain('Vista de inspector');
+    expect(qs('dashboard-role-icon').textContent).toBe('IN');
+  });
+
+  it('renders inspection operation KPIs and a visual compliance meter', () => {
+    setupPlan();
+    runInspection('gr-001', 'passed');
+    runInspection('gr-002', 'failed');
+
+    qs('quality-dashboard').click();
+
+    expect(qs('kpi-total-inspections').textContent).toBe('2');
+    expect(qs('kpi-performed-inspections').textContent).toBe('2');
+    expect(qs('kpi-approved-inspections').textContent).toBe('1');
+    expect(qs('kpi-observation-inspections').textContent).toBe('1');
+    expect(qs('quality-compliance-value').textContent).toBe('50%');
+    expect(qs('quality-compliance-fill').style.width).toBe('50%');
   });
 });

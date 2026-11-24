@@ -83,8 +83,8 @@ describe('User Story 6 - relabel screens from configuration', () => {
     qs('nav-documents').click();
     expect(qs('view-entities').hidden).toBe(true);
     expect(qs('view-documents').hidden).toBe(false);
-    qs('nav-dashboard').click();
-    expect(qs('view-dashboard').hidden).toBe(false);
+    qs('quality-dashboard').click();
+    expect(qs('view-quality-dashboard').hidden).toBe(false);
   });
 
   it('derives the logo monogram from the configured module name', async () => {

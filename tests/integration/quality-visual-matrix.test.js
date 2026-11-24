@@ -61,6 +61,27 @@ describe('US15 quality visual matrix', () => {
     }
   });
 
+  it('opens on Panel principal and places Entidades and Documentos directly below it in GENERAL', async () => {
+    const dom = await bootQualityApp({ role: 'jefe_calidad', width: 1024 });
+    try {
+      const visibleNavIds = [...document.querySelectorAll('.side-nav button')]
+        .filter(button => !button.hidden && button.style.display !== 'none')
+        .slice(0, 5)
+        .map(button => button.id);
+      expect(visibleNavIds).toEqual([
+        'quality-dashboard',
+        'nav-entities',
+        'nav-documents',
+        'quality-search',
+        'quality-entities'
+      ]);
+      expect(qs('view-quality-dashboard').hidden).toBe(false);
+      expect(ariaCurrent()).toBe('quality-dashboard');
+    } finally {
+      dom.window.close();
+    }
+  });
+
   it('renders every screen for every role and breakpoint without overflow', async () => {
     for(const role of ROLES){
       for(const width of WIDTHS){

@@ -1,3 +1,5 @@
+import { permissionLabel } from '../permissions.js';
+
 export function renderPermissionNotice(action){
   const notice = document.createElement('div');
   notice.className = 'permission-notice';
@@ -15,8 +17,10 @@ export function renderPermissionNotice(action){
   icon.innerHTML = '<circle cx="9" cy="9" r="6.5"></circle><path d="M9 6v3.5"></path><path d="M9 12v.1"></path>';
   notice.appendChild(icon);
   const text = document.createElement('span');
+  const label = permissionLabel(action);
+  const friendlyLabel = label.charAt(0).toLowerCase() + label.slice(1);
   text.textContent = action
-    ? `Modo solo lectura. Permiso requerido: ${action}.`
+    ? `Modo solo lectura. Permiso requerido: ${friendlyLabel}.`
     : 'Modo solo lectura.';
   notice.appendChild(text);
   if(action) notice.dataset.permission = action;

@@ -87,9 +87,10 @@ describe('User Story 13 - branded ERP workspace shell', () => {
 
   it('highlights the active module while navigating between all screens', async () => {
     await bootWith(undefined);
-    const activeModule = () => document.querySelector('.nav-module[aria-current="page"]').dataset.module;
+    const activeModule = () => document.querySelector('.nav-module[aria-current="page"]')?.dataset.module || null;
 
-    expect(activeModule()).toBe('dashboard');
+    expect(activeModule()).toBeNull();
+    expect(qs('quality-dashboard').getAttribute('aria-current')).toBe('page');
 
     qs('nav-entities').click();
     expect(activeModule()).toBe('entities');
@@ -103,9 +104,9 @@ describe('User Story 13 - branded ERP workspace shell', () => {
     expect(activeModule()).toBe('search');
     expect(qs('view-search').hidden).toBe(false);
 
-    qs('nav-dashboard').click();
-    expect(activeModule()).toBe('dashboard');
-    expect(qs('view-dashboard').hidden).toBe(false);
+    qs('quality-dashboard').click();
+    expect(activeModule()).toBeNull();
+    expect(qs('view-quality-dashboard').hidden).toBe(false);
   });
 
   it('preserves all stored data while navigating between modules', async () => {
@@ -116,7 +117,7 @@ describe('User Story 13 - branded ERP workspace shell', () => {
     qs('nav-entities').click();
     qs('nav-documents').click();
     qs('nav-search').click();
-    qs('nav-dashboard').click();
+    qs('quality-dashboard').click();
 
     expect(loadEntities().length).toBe(1);
     expect(loadDocuments().length).toBe(1);

@@ -41,7 +41,8 @@ async function bootWith(configOverride){
 describe('User Story 3 - home dashboard with quick actions and record stats', () => {
   it('opens on the dashboard with all other views hidden', async () => {
     await bootWith(undefined);
-    expect(qs('view-dashboard').hidden).toBe(false);
+    expect(qs('view-quality-dashboard').hidden).toBe(false);
+    expect(qs('view-dashboard').hidden).toBe(true);
     expect(qs('view-entities').hidden).toBe(true);
     expect(qs('view-documents').hidden).toBe(true);
     expect(qs('view-search').hidden).toBe(true);
@@ -72,7 +73,7 @@ describe('User Story 3 - home dashboard with quick actions and record stats', ()
     addEntity({ name: 'Globex', code: 'GL-002' });
     addDocument({ entityId: entity.entity_id, folio: 1001, startDate: '2026-08-01', endDate: '2026-08-05' });
 
-    qs('nav-dashboard').click();
+    qs('quality-dashboard').click();
     expect(qs('stat-entities').textContent).toBe('2');
     expect(qs('stat-documents').textContent).toBe('1');
   });
@@ -85,14 +86,14 @@ describe('User Story 3 - home dashboard with quick actions and record stats', ()
     qs('entity-form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
     expect(loadEntities().length).toBe(1);
 
-    qs('nav-dashboard').click();
+    qs('quality-dashboard').click();
     expect(qs('stat-entities').textContent).toBe('1');
   });
 
   it('opens the entity management area with a cleared form via the new-entity action', async () => {
     await bootWith(undefined);
     qs('name').value = 'Stale draft';
-    qs('nav-dashboard').click();
+    qs('quality-dashboard').click();
 
     qs('action-new-entity').click();
     qs('nav-entities').click();

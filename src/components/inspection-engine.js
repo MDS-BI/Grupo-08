@@ -30,7 +30,7 @@ import {
 import { addEvidenceFromFile, downloadEvidence, renderEvidenceList } from './evidence.js';
 import { can, assertCan, applyPermissionState } from '../permissions.js';
 import { renderStatusBadge } from './status-badge.js';
-import { renderPermissionNotice } from './permission-notice.js';
+import { clearPermissionNotice, renderPermissionNotice } from './permission-notice.js';
 
 function activeRole(){
   const getter = storage.getActiveRole;
@@ -85,6 +85,7 @@ function referenceContext(referenceModule, referenceId){
 
 function enabledPlans(context = {}){
   return loadCollection('quality_inspection_plans')
+    .filter(plan => plan.status === 'approved')
     .filter(plan => planCriteria(plan.inspection_plan_id).length > 0)
     .filter(plan => !context.productId || !context.stage
       || (plan.product_id === context.productId && plan.applicable_stage === context.stage));
@@ -638,6 +639,14 @@ function handleInspectionEvidenceClick(event){
   }
 }
 
+function syncInspectionPermissions(){
+  const form = qs('inspection-form');
+  if(!form) return;
+  clearPermissionNotice(form);
+  if(!can(activeRole(), 'submit_inspection')) form.prepend(renderPermissionNotice('submit_inspection'));
+  applyPermissionState(form, activeRole());
+}
+
 export function renderInspectionView(options = {}){
   const planSelect = qs('inspection-plan');
   if(!planSelect) return;
@@ -673,6 +682,7 @@ export function renderInspectionView(options = {}){
   previewEvaluation();
   renderDrafts();
   renderInspectionEvidence();
+  syncInspectionPermissions();
 }
 
 export function startInspection(referenceModule, referenceId){
@@ -689,6 +699,7 @@ export function startInspection(referenceModule, referenceId){
     if(onlyPlan) planSelect.value = onlyPlan;
   }
   if(referenceId && planSelect.value) resumeDraft(referenceModule, referenceId, planSelect.value);
+  if(planSelect.value && !qs('inspection-id').value) renderMeasurements(planSelect.value);
   if(!qs('inspection-id').value) qs('inspection-date').value = todayIso();
   previewEvaluation();
   planSelect.focus();
@@ -748,6 +759,5 @@ export function initInspectionEngine(){
   qs('inspection-evidence-form').addEventListener('submit', handleInspectionEvidenceSubmit);
   qs('inspection-evidence-inspection').addEventListener('change', () => renderInspectionEvidence());
   qs('inspection-evidence-list').addEventListener('click', handleInspectionEvidenceClick);
-  if(!can(activeRole(), 'submit_inspection')) form.prepend(renderPermissionNotice('submit_inspection'));
-  applyPermissionState(form, activeRole());
+  syncInspectionPermissions();
 }

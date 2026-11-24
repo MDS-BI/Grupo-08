@@ -53,6 +53,12 @@ const ALERT_SEVERITY_LABELS = Object.freeze({
   critical: 'Crítica'
 });
 
+const QUALITY_ROLE_META = Object.freeze({
+  jefe_calidad: { label: 'Jefe de Calidad', initials: 'JC' },
+  inspector: { label: 'Inspector de Calidad', initials: 'IN' },
+  gerente: { label: 'Gerente de Operaciones', initials: 'GO' }
+});
+
 function alertMetricLabel(metric){
   return ALERT_METRIC_LABELS[metric] || metric || '';
 }
@@ -92,6 +98,22 @@ export function renderDashboard(){
 // ============================================================================
 
 const QUALITY_ROLE_KEY = 'erp_quality:viewer_role';
+
+const DASHBOARD_ROLE_LAYOUT = Object.freeze({
+  jefe_calidad: { hiddenKpis: [], hiddenCharts: [], hiddenPanels: [], priorityKpis: ['kpi-pending-inspections', 'kpi-open-nc'] },
+  inspector: {
+    hiddenKpis: ['kpi-capa-effectiveness', 'kpi-overdue-capa', 'kpi-pending-capa', 'kpi-pending-documents'],
+    hiddenCharts: ['quality-approval-by-stage', 'quality-pareto-stage'],
+    hiddenPanels: ['quality-summary-approvals', 'quality-summary-capa'],
+    priorityKpis: ['kpi-pending-inspections', 'kpi-performed-inspections']
+  },
+  gerente: {
+    hiddenKpis: ['kpi-pending-documents', 'kpi-pending-inspections'],
+    hiddenCharts: ['quality-pareto-product', 'quality-pareto-stage'],
+    hiddenPanels: ['quality-summary-approvals'],
+    priorityKpis: ['kpi-approval-rate', 'kpi-overdue-capa']
+  }
+});
 
 function dashboardRole(){
   const select = qs('quality-role') || qs('quality-settings-role');
@@ -182,6 +204,12 @@ export function qualityMetrics(){
     const status = inspection.inspection_status || inspection.status;
     return status === 'draft' || isPendingReview(inspection);
   });
+  const performed = inspections.filter(inspection => {
+    const status = inspection.inspection_status || inspection.status;
+    return status === 'completed';
+  });
+  const approvedInspections = completed.filter(inspection => inspection.overall_result === 'passed').length;
+  const observationInspections = completed.filter(inspection => ['failed', 'conditional'].includes(inspection.overall_result)).length;
   const openNcs = ncs.filter(nc => nc.status === 'open' || nc.status === 'under_review');
   const overdueCapas = capas.filter(action => isCapaOverdue(action));
   const pendingCapas = capas.filter(action => isPendingCapaClosure(action));
@@ -219,6 +247,9 @@ export function qualityMetrics(){
     inspections,
     completed,
     drafts,
+    performed,
+    approvedInspections,
+    observationInspections,
     ncs,
     capas,
     documents,
@@ -244,6 +275,10 @@ export function kpiValues(metrics){
     overdue_capa: metrics.overdueCapas.length,
     capa_effectiveness: metrics.capaEffectiveness,
     pending_inspections: metrics.drafts.length,
+    total_inspections: metrics.inspections.length,
+    performed_inspections: metrics.performed.length,
+    approved_inspections: metrics.approvedInspections,
+    observation_inspections: metrics.observationInspections,
     final_inspections: metrics.completed.length,
     pending_capa: metrics.pendingCapas.length,
     pending_documents: metrics.pendingDocuments.length
@@ -264,6 +299,10 @@ export function buildDashboardCsv(metrics){
   rows.push(['Cierres CAPA pendientes', metrics.pendingCapas.length]);
   rows.push(['Eficacia CAPA', `${metrics.capaEffectiveness}%`]);
   rows.push(['Inspecciones pendientes', metrics.drafts.length]);
+  rows.push(['Total de inspecciones', metrics.inspections.length]);
+  rows.push(['Inspecciones realizadas', metrics.performed.length]);
+  rows.push(['Inspecciones aprobadas', metrics.approvedInspections]);
+  rows.push(['Inspecciones reprobadas u observadas', metrics.observationInspections]);
   rows.push(['Dictámenes finales', metrics.completed.length]);
   rows.push(['Documentos pendientes', metrics.pendingDocuments.length]);
   return rowsToCsv(rows);
@@ -647,21 +686,98 @@ function renderRecentActivity(metrics){
   });
 }
 
+function renderComplianceMeter(metrics){
+  const value = qs('quality-compliance-value');
+  const fill = qs('quality-compliance-fill');
+  const caption = qs('quality-compliance-caption');
+  const meter = qs('quality-compliance-meter');
+  const ring = qs('quality-compliance-ring');
+  const ringValue = qs('quality-compliance-ring-value');
+  const chip = qs('quality-compliance-chip');
+  const percentage = Math.max(0, Math.min(100, metrics.approvalRate));
+  const ariaLabel = `Cumplimiento de calidad: ${metrics.approvalRate}%. ${metrics.approvedInspections} aprobadas de ${metrics.performed.length} inspecciones realizadas.`;
+  if(value) value.textContent = `${metrics.approvalRate}%`;
+  if(fill) fill.style.width = `${percentage}%`;
+  if(caption) caption.textContent = `${metrics.approvedInspections} aprobadas de ${metrics.performed.length} inspecciones realizadas.`;
+  if(meter) meter.setAttribute('aria-label', ariaLabel);
+  if(ringValue) ringValue.textContent = `${metrics.approvalRate}%`;
+  if(ring){
+    ring.style.background = `conic-gradient(#16a34a 0% ${percentage}%, #e9eef7 ${percentage}% 100%)`;
+    ring.setAttribute('aria-label', ariaLabel);
+  }
+  if(chip) chip.textContent = metrics.performed.length
+    ? `${metrics.approvedInspections} de ${metrics.performed.length} aprobadas`
+    : 'Sin inspecciones realizadas';
+}
+
+function roleSummary(role, metrics){
+  if(role === 'inspector'){
+    return {
+      text: `Vista de inspector: ${metrics.drafts.length} inspecciones pendientes y ${metrics.performed.length} realizadas en el sistema.`,
+      items: [
+        ['Pendientes', metrics.drafts.length, 'pending'],
+        ['Realizadas', metrics.performed.length, 'approved'],
+        ['NC abiertas', metrics.openNcs.length, 'rejected']
+      ]
+    };
+  }
+  if(role === 'gerente'){
+    return {
+      text: `Vista ejecutiva: ${metrics.approvalRate}% de cumplimiento y ${metrics.overdueCapas.length} CAPA vencidas.`,
+      items: [
+        ['Cumplimiento', `${metrics.approvalRate}%`, 'approved'],
+        ['CAPA vencidas', metrics.overdueCapas.length, 'rejected'],
+        ['NC abiertas', metrics.openNcs.length, 'pending']
+      ]
+    };
+  }
+  return {
+    text: `Supervisión de calidad: ${metrics.drafts.length} inspecciones pendientes y ${metrics.openNcs.length} no conformidades abiertas.`,
+    items: [
+      ['Por revisar', metrics.drafts.length, 'pending'],
+      ['NC abiertas', metrics.openNcs.length, 'rejected'],
+      ['Cierres CAPA', metrics.pendingCapas.length, 'info']
+    ]
+  };
+}
+
+function renderRoleSummary(role, metrics){
+  const summary = qs('quality-role-summary');
+  const host = qs('quality-role-metrics');
+  const icon = qs('dashboard-role-icon');
+  const meta = QUALITY_ROLE_META[role] || QUALITY_ROLE_META.jefe_calidad;
+  const content = roleSummary(role, metrics);
+  if(summary) summary.textContent = content.text;
+  if(icon) icon.textContent = meta.initials;
+  if(!host) return;
+  host.replaceChildren();
+  content.items.forEach(([label, value, tone]) => {
+    const item = document.createElement('div');
+    item.className = `dashboard-role-metric tone-${tone}`;
+    const name = document.createElement('span');
+    name.textContent = label;
+    const number = document.createElement('strong');
+    number.textContent = String(value);
+    item.append(name, number);
+    host.appendChild(item);
+  });
+}
+
 function renderQuickActions(){
   const host = qs('quality-quick-actions');
   if(!host) return;
   const role = dashboardRole();
   const definitions = {
     jefe_calidad: [
+      ['Ejecutar inspección', 'quality-inspections', 'execute_inspection'],
       ['Aprobaciones pendientes', 'quality-approvals', 'view_approval_queues'],
-      ['Revisión de inspecciones', 'quality-inspections', 'review_inspection'],
       ['Cierres CAPA', 'quality-capa', 'review_capa_closure'],
-      ['Reportes', 'quality-reports', 'view_reports']
+      ['Reportes e indicadores', 'quality-reports', 'view_reports']
     ],
     inspector: [
       ['Lotes pendientes', 'pending-lots', 'execute_inspection'],
-      ['Ejecución de inspección', 'quality-inspections', 'execute_inspection'],
-      ['Listas aprobadas', 'quality-checklists', 'view_reports'],
+      ['Ejecutar inspección', 'quality-inspections', 'execute_inspection'],
+      ['Listas de verificación', 'quality-checklists', 'view_reports'],
       ['Registro de NC/CAPA', 'quality-non-conformances', 'create_non_conformance']
     ],
     gerente: [
@@ -697,18 +813,50 @@ function renderOperationalSummary(){
   setKpi('quality-summary-nc-value', String(loadCollection('non_conformances').filter(item => item.status === 'open' || item.status === 'under_review').length));
 }
 
+function setDashboardElementState(id, options){
+  const el = qs(id);
+  if(!el) return;
+  const target = el.closest('.stat-card, .card, .quality-summary-item') || el;
+  target.hidden = Boolean(options.hidden);
+  target.classList.toggle('dashboard-priority', Boolean(options.priority));
+}
+
+function applyDashboardRoleLayout(role){
+  const layout = DASHBOARD_ROLE_LAYOUT[role] || DASHBOARD_ROLE_LAYOUT.jefe_calidad;
+  const view = qs('view-quality-dashboard');
+  if(view) view.dataset.dashboardRole = role;
+  const priorities = new Set(layout.priorityKpis);
+  ['kpi-approval-rate', 'kpi-open-nc', 'kpi-overdue-capa', 'kpi-capa-effectiveness', 'kpi-pending-inspections', 'kpi-total-inspections', 'kpi-performed-inspections', 'kpi-approved-inspections', 'kpi-observation-inspections', 'kpi-final-inspections', 'kpi-pending-capa', 'kpi-pending-documents'].forEach(id => {
+    setDashboardElementState(id, { hidden: layout.hiddenKpis.includes(id), priority: priorities.has(id) });
+  });
+  ['quality-verdict-donut', 'quality-trend', 'quality-approval-by-stage', 'quality-nc-by-severity', 'quality-pareto-product', 'quality-pareto-stage', 'quality-inspector-detail'].forEach(id => {
+    setDashboardElementState(id, { hidden: layout.hiddenCharts.includes(id) });
+  });
+  ['quality-summary-approvals', 'quality-summary-inspections', 'quality-summary-capa', 'quality-summary-nc'].forEach(id => {
+    setDashboardElementState(id, { hidden: layout.hiddenPanels.includes(id) });
+  });
+}
+
 export function renderQualityDashboard(){
   const role = dashboardRole();
+  applyDashboardRoleLayout(role);
+  renderDashboard();
   const metrics = qualityMetrics();
   setKpi('kpi-approval-rate', `${metrics.approvalRate}%`);
   setKpi('kpi-open-nc', String(metrics.openNcs.length));
   setKpi('kpi-overdue-capa', String(metrics.overdueCapas.length));
   setKpi('kpi-capa-effectiveness', `${metrics.capaEffectiveness}%`);
   setKpi('kpi-pending-inspections', String(metrics.drafts.length));
+  setKpi('kpi-total-inspections', String(metrics.inspections.length));
+  setKpi('kpi-performed-inspections', String(metrics.performed.length));
+  setKpi('kpi-approved-inspections', String(metrics.approvedInspections));
+  setKpi('kpi-observation-inspections', String(metrics.observationInspections));
   setKpi('kpi-final-inspections', String(metrics.completed.length));
   setKpi('kpi-pending-capa', String(metrics.pendingCapas.length));
   setKpi('kpi-pending-documents', String(metrics.pendingDocuments.length));
   renderOperationalSummary();
+  renderComplianceMeter(metrics);
+  renderRoleSummary(role, metrics);
   renderRecentActivity(metrics);
   renderQuickActions();
 
@@ -734,12 +882,7 @@ export function renderQualityDashboard(){
   );
 
   const detail = qs('quality-inspector-detail');
-  const dashboardRoles = {
-    jefe_calidad: { label: 'Jefe de Calidad', initials: 'JC' },
-    inspector: { label: 'Inspector de Calidad', initials: 'IN' },
-    gerente: { label: 'Gerente de Operaciones', initials: 'GO' }
-  };
-  const meta = dashboardRoles[role] || dashboardRoles.jefe_calidad;
+  const meta = QUALITY_ROLE_META[role] || QUALITY_ROLE_META.jefe_calidad;
   const topbarRole = qs('topbar-role');
   const topbarAvatar = qs('topbar-avatar');
   if(topbarRole) topbarRole.textContent = meta.label;

@@ -5,7 +5,7 @@ import { createEntityItem } from './components/entity-list.js';
 import { clearDocumentForm, startDocumentEdit, collectDocumentPayload, showDocumentErrors } from './components/document-form.js';
 import { folioLabel } from './components/document-list.js';
 import { renderLogo, applyShellLabels, setActiveModule } from './components/shell.js';
-import { renderDashboard, renderQualityDashboard, initQualityAlerts } from './components/dashboard.js';
+import { renderQualityDashboard, initQualityAlerts } from './components/dashboard.js';
 import { setupSearchBar, renderSearchResults } from './components/search-bar.js';
 import { renderPendingLots, initPendingLots } from './components/pending-lots.js';
 import { renderPlanConfig, initPlanConfig, clearPlanForm, clearCriterionForm } from './components/quality-plan-config.js';
@@ -106,8 +106,12 @@ function currentQualityRole(){
 
 function syncRoleIndicator(role){
   const meta = ROLE_META[role] || ROLE_META.jefe_calidad;
+  const moduleName = qs('topbar-module-name');
+  const topbarUser = qs('topbar-user-name');
   const topbarRole = qs('topbar-role');
   const topbarAvatar = qs('topbar-avatar');
+  if(moduleName) moduleName.textContent = 'Control de Calidad';
+  if(topbarUser) topbarUser.textContent = 'Usuario de calidad';
   if(topbarRole) topbarRole.textContent = meta.label;
   if(topbarAvatar) topbarAvatar.textContent = meta.initials;
   const welcome = qs('quality-welcome');
@@ -250,13 +254,15 @@ function showQuality(name, opts = {}){
 
 function showModule(name, opts = {}){
   if(!MODULES.includes(name)) name = 'dashboard';
+  if(name === 'dashboard'){
+    showQuality('quality-dashboard');
+    return;
+  }
+  activeQualityView = null;
   MODULES.forEach(m => { qs(VIEWS[m]).hidden = m !== name; });
   hideQualityViews();
   setActiveQuality(null);
   setActiveModule(name);
-  if(name === 'dashboard'){
-    renderDashboard();
-  }
   if(name === 'entities'){
     document.querySelectorAll('#view-entities .entity-write').forEach(el => { el.hidden = false; });
     const readonly = qs('quality-entities-readonly');
@@ -541,6 +547,13 @@ export function initApp(resolved){
   ensureSeedData();
   renderLogo(qs('logo-mark'));
   applyLabels(resolved.config);
+  ['nav-search', 'nav-dashboard'].forEach(id => {
+    const legacyNav = qs(id);
+    if(legacyNav){
+      legacyNav.hidden = true;
+      legacyNav.style.display = 'none';
+    }
+  });
   wireEvents();
   clearEntityForm();
   clearDocumentForm();
@@ -558,7 +571,7 @@ export function initApp(resolved){
     if(select) select.value = role;
   });
   syncRoleIndicator(role);
-  showModule('dashboard');
+  showQuality('quality-dashboard');
   applyQualityPermissions(document);
 }
 
