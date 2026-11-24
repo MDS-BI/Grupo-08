@@ -1,16 +1,16 @@
-import {
-  loadChecklists,
-  validateChecklist,
-  addChecklist,
-  updateChecklist,
-  deleteChecklist,
-  addChecklistEvaluation
-} from '../storage.js';
+import * as storage from '../storage.js';
+import { loadChecklists, validateChecklist, addChecklistEvaluation } from '../storage.js';
+import { can, assertCan, applyPermissionState } from '../permissions.js';
+import { CHECKLIST_STATUSES } from '../quality-status.js';
 import { qs, actionButton, emptyState, todayIso } from './quality-utils.js';
+import { renderStatusBadge, renderStatusLegend, statusLabel } from './status-badge.js';
+import { renderPermissionNotice } from './permission-notice.js';
 
 const STATUS_META = Object.freeze({
-  active: { label: 'Activo', className: 'checklist-status-active' },
   draft: { label: 'Borrador', className: 'checklist-status-draft' },
+  pending_approval: { label: 'Pendiente', className: 'status-pending_approval badge-pending_approval' },
+  approved: { label: 'Aprobado', className: 'checklist-status-active status-approved badge-approved' },
+  rejected: { label: 'Rechazado', className: 'status-rejected badge-rejected' },
   archived: { label: 'Archivado', className: 'checklist-status-archived' }
 });
 
@@ -35,12 +35,77 @@ const state = {
   evaluation: {}
 };
 
+function activeRole(){
+  const getter = storage.getActiveRole;
+  if(typeof getter === 'function'){
+    try{ return getter(); }catch{ return 'jefe_calidad'; }
+  }
+  return 'jefe_calidad';
+}
+
+function invoke(name, ...args){
+  const fn = storage[name];
+  if(typeof fn !== 'function') throw new Error(`La operación ${name} no está disponible en este momento.`);
+  return fn(...args);
+}
+
+function normalizeStatus(status){
+  if(status === 'active') return 'approved';
+  if(status === 'under_review') return 'pending_review';
+  return CHECKLIST_STATUSES.includes(status) ? status : 'draft';
+}
+
+function checklistHasHistory(checklist){
+  if(!checklist) return false;
+  if(checklist.is_locked || (checklist.evaluations || []).length) return true;
+  return storage.loadCollection('quality_inspections').some(item => item.checklist_id === checklist.checklist_id);
+}
+
+function checklistContext(checklist){
+  return {
+    status: normalizeStatus(checklist && checklist.status),
+    criteriaCount: (checklist && checklist.criteria || []).length,
+    hasHistory: checklistHasHistory(checklist),
+    isLocked: Boolean(checklist && checklist.is_locked)
+  };
+}
+
+function isEditableStatus(checklist){
+  return ['draft', 'rejected'].includes(normalizeStatus(checklist && checklist.status));
+}
+
+function workflowButton(label, dataset, permission, disabled){
+  const button = actionButton(label, 'secondary', dataset);
+  if(disabled){
+    button.disabled = true;
+    button.dataset.stateDisabled = 'true';
+  }else{
+    button.setAttribute('data-permission', permission);
+  }
+  return button;
+}
+
+function applyStateDisables(root){
+  if(!root || typeof root.querySelectorAll !== 'function') return;
+  root.querySelectorAll('[data-state-disabled]').forEach(button => { button.disabled = true; });
+}
+
+function permissionNotice(container, action){
+  if(!container || can(activeRole(), action)) return;
+  container.prepend(renderPermissionNotice(action));
+}
+
+function statusBadge(status){
+  return renderStatusBadge(normalizeStatus(status));
+}
+
 function checklistById(id){
   return loadChecklists().find(item => item.id === id || item.checklist_id === id);
 }
 
 function statusMeta(status){
-  return STATUS_META[status] || STATUS_META.active;
+  const key = normalizeStatus(status);
+  return STATUS_META[key] || { label: statusLabel(key), className: `status-${key} badge-${key}` };
 }
 
 function criterionKey(criterion, index){
@@ -96,7 +161,7 @@ function renderSummary(){
       icon: 'templates',
       accent: 'blue',
       label: 'Plantillas activas',
-      value: checklists.filter(item => item.status === 'active').length
+      value: checklists.filter(item => normalizeStatus(item.status) === 'approved').length
     },
     {
       icon: 'criteria',
@@ -129,13 +194,15 @@ function renderSummary(){
 function renderCards(){
   const container = qs('checklist-cards');
   if(!container) return;
+  const role = activeRole();
   const search = (qs('checklist-search')?.value || '').trim().toLowerCase();
   const category = qs('checklist-category-filter')?.value || '';
   const status = qs('checklist-status-filter')?.value || '';
   const all = loadChecklists();
   const checklists = all.filter(item => {
+    const normalized = normalizeStatus(item.status);
     if(category && item.category !== category) return false;
-    if(status && item.status !== status) return false;
+    if(status && normalized !== status) return false;
     if(!search) return true;
     return [item.name, item.category, item.description]
       .join(' ').toLowerCase().includes(search);
@@ -146,10 +213,12 @@ function renderCards(){
   container.hidden = false;
   if(checklists.length === 0){
     emptyState(container, 'No hay listas de verificación con los filtros seleccionados.', true);
-    return;
   }
+  container.appendChild(renderStatusLegend(CHECKLIST_STATUSES));
 
   checklists.forEach(checklist => {
+    const normalized = normalizeStatus(checklist.status);
+    const context = checklistContext(checklist);
     const card = document.createElement('article');
     card.className = 'checklist-card';
 
@@ -163,7 +232,7 @@ function renderCards(){
     categoryLine.className = 'checklist-card-category';
     categoryLine.textContent = checklist.category || 'Sin categoría';
     titleBox.append(title, categoryLine);
-    head.append(titleBox, pill(statusMeta(checklist.status).label, `status-badge ${statusMeta(checklist.status).className}`));
+    head.append(titleBox, statusBadge(normalized));
     card.appendChild(head);
 
     const description = document.createElement('p');
@@ -173,11 +242,14 @@ function renderCards(){
 
     const meta = document.createElement('div');
     meta.className = 'checklist-card-meta';
-    [
+    const metaText = [
       `${(checklist.criteria || []).length} criterios`,
       `Creada ${formatDate(checklist.createdAt)}`,
       `${(checklist.evaluations || []).length} evaluaciones`
-    ].forEach(text => {
+    ];
+    if(normalized === 'approved') metaText.push('Activo · aprobado');
+    if(checklist.review_justification && normalized === 'rejected') metaText.push(`Rechazo: ${checklist.review_justification}`);
+    metaText.forEach(text => {
       const span = document.createElement('span');
       span.textContent = text;
       meta.appendChild(span);
@@ -197,13 +269,29 @@ function renderCards(){
     const actions = document.createElement('div');
     actions.className = 'form-actions checklist-card-actions';
     actions.appendChild(actionButton('Ver', 'secondary', { checklistView: checklist.id }));
-    actions.appendChild(actionButton('Evaluar', 'secondary', { checklistEvaluate: checklist.id }));
-    actions.appendChild(actionButton('Editar', 'secondary', { checklistEdit: checklist.id }));
-    actions.appendChild(actionButton('Eliminar', 'danger', { checklistDelete: checklist.id }));
+    actions.appendChild(workflowButton('Evaluar', { checklistEvaluate: checklist.id }, 'execute_inspection', normalized !== 'approved'));
+    actions.appendChild(workflowButton('Editar', { checklistEdit: checklist.id }, 'manage_checklist', !isEditableStatus(checklist)));
+    if(['draft', 'rejected'].includes(normalized)){
+      actions.appendChild(workflowButton('Enviar a aprobación', { checklistSubmit: checklist.id }, 'submit_checklist', !context.criteriaCount));
+    }
+    if(normalized === 'pending_approval'){
+      actions.appendChild(workflowButton('Aprobar', { checklistApprove: checklist.id }, 'approve_checklist', false));
+      actions.appendChild(workflowButton('Rechazar', { checklistReject: checklist.id }, 'reject_checklist', false));
+    }
+    if(normalized === 'approved'){
+      actions.appendChild(workflowButton('Nueva versión', { checklistVersion: checklist.id }, 'version_checklist', false));
+    }
+    const del = workflowButton('Eliminar', { checklistDelete: checklist.id }, 'delete_checklist', context.hasHistory || normalized === 'approved');
+    del.classList.add('danger');
+    actions.appendChild(del);
     card.appendChild(actions);
 
+    applyPermissionState(actions, role, context);
+    applyStateDisables(actions);
     container.appendChild(card);
   });
+
+  permissionNotice(container, 'manage_checklist');
 }
 
 function updateCriterionCount(){
@@ -255,6 +343,38 @@ function clearCriterionEntry(){
   state.editingCriterionIndex = null;
 }
 
+function syncStatusControls(){
+  const status = qs('checklist-status');
+  if(status){
+    status.innerHTML = '';
+    CHECKLIST_STATUSES.forEach(key => {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = statusMeta(key).label;
+      status.appendChild(option);
+    });
+    status.value = 'draft';
+    status.disabled = true;
+    status.title = 'El estado se gestiona con las acciones de aprobación.';
+  }
+  const filter = qs('checklist-status-filter');
+  if(filter){
+    const previous = filter.value;
+    filter.innerHTML = '';
+    const all = document.createElement('option');
+    all.value = '';
+    all.textContent = 'Todos los estados';
+    filter.appendChild(all);
+    CHECKLIST_STATUSES.forEach(key => {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = statusMeta(key).label;
+      filter.appendChild(option);
+    });
+    filter.value = CHECKLIST_STATUSES.includes(previous) ? previous : '';
+  }
+}
+
 export function clearChecklistForm(){
   const form = qs('checklist-form');
   if(form) form.reset();
@@ -269,7 +389,7 @@ export function clearChecklistForm(){
   const category = qs('checklist-category');
   if(category) category.value = 'Recepción';
   const status = qs('checklist-status');
-  if(status) status.value = 'active';
+  if(status) status.value = 'draft';
   renderDraftCriteria();
 }
 
@@ -277,13 +397,23 @@ function openEditor(id){
   const checklist = id ? checklistById(id) : null;
   clearChecklistForm();
   if(checklist){
+    if(!isEditableStatus(checklist)){
+      setFormError('Esta plantilla no puede editarse; crea una nueva versión.');
+      return;
+    }
+    try{
+      assertCan(activeRole(), 'manage_checklist', checklistContext(checklist));
+    }catch(error){
+      setFormError(error.message);
+      return;
+    }
     state.editingId = checklist.id;
     state.draftCriteria = (checklist.criteria || []).map(criterion => ({ ...criterion }));
     qs('checklist-id').value = checklist.id;
     qs('checklist-name').value = checklist.name;
     qs('checklist-category').value = checklist.category;
     qs('checklist-description').value = checklist.description || '';
-    qs('checklist-status').value = checklist.status || 'active';
+    qs('checklist-status').value = normalizeStatus(checklist.status);
     qs('checklist-editor-heading').textContent = 'Editar checklist';
     qs('checklist-save').textContent = 'Guardar cambios';
     renderDraftCriteria();
@@ -342,11 +472,23 @@ function handleCriterionListClick(event){
 
 function handleFormSubmit(event){
   event.preventDefault();
+  const role = activeRole();
+  const current = state.editingId ? checklistById(state.editingId) : null;
+  try{
+    assertCan(role, 'manage_checklist', checklistContext(current || { status: 'draft', criteria: state.draftCriteria }));
+  }catch(error){
+    setFormError(error.message);
+    return;
+  }
+  if(current && !isEditableStatus(current)){
+    setFormError('Esta plantilla no puede editarse; crea una nueva versión.');
+    return;
+  }
   const payload = {
     name: qs('checklist-name').value.trim(),
     description: qs('checklist-description').value.trim(),
     category: qs('checklist-category').value,
-    status: qs('checklist-status').value,
+    status: 'draft',
     criteria: state.draftCriteria
   };
   const check = validateChecklist(payload);
@@ -355,8 +497,8 @@ function handleFormSubmit(event){
     return;
   }
   try{
-    if(state.editingId) updateChecklist(state.editingId, payload);
-    else addChecklist(payload);
+    if(state.editingId) invoke('updateChecklist', state.editingId, payload, role);
+    else invoke('addChecklist', { ...payload, created_by: role });
     renderChecklists();
   }catch(err){
     setFormError(err.message);
@@ -369,6 +511,9 @@ function renderDetail(){
   body.innerHTML = '';
   const checklist = checklistById(state.activeId);
   if(!checklist) return;
+  const normalized = normalizeStatus(checklist.status);
+  const context = checklistContext(checklist);
+  const role = activeRole();
   qs('checklist-detail-heading').textContent = checklist.name;
 
   const head = document.createElement('div');
@@ -376,24 +521,42 @@ function renderDetail(){
   const badges = document.createElement('div');
   badges.className = 'checklist-detail-badges';
   badges.append(pill(checklist.category || 'Sin categoría', 'checklist-chip'));
-  badges.append(pill(statusMeta(checklist.status).label, `status-badge ${statusMeta(checklist.status).className}`));
+  badges.append(statusBadge(normalized));
+  if(normalized === 'approved') badges.append(pill('Activo', 'checklist-chip checklist-chip-active'));
   head.appendChild(badges);
   const description = document.createElement('p');
   description.className = 'checklist-detail-description';
   description.textContent = checklist.description || 'Sin descripción registrada.';
   const meta = document.createElement('div');
   meta.className = 'checklist-card-meta';
-  [`${(checklist.criteria || []).length} criterios`, `Creada ${formatDate(checklist.createdAt)}`, `${(checklist.evaluations || []).length} evaluaciones`].forEach(text => {
+  const metaText = [`${(checklist.criteria || []).length} criterios`, `Creada ${formatDate(checklist.createdAt)}`, `${(checklist.evaluations || []).length} evaluaciones`];
+  if(checklist.review_justification && normalized === 'rejected') metaText.push(`Rechazo: ${checklist.review_justification}`);
+  metaText.forEach(text => {
     const span = document.createElement('span');
     span.textContent = text;
     meta.appendChild(span);
   });
   const actions = document.createElement('div');
   actions.className = 'form-actions';
-  actions.appendChild(actionButton('Editar plantilla', 'secondary', { detailEdit: checklist.id }));
-  actions.appendChild(actionButton(state.evaluating ? 'Cancelar evaluación' : 'Iniciar evaluación', 'primary', { detailEvaluate: checklist.id }));
+  actions.appendChild(workflowButton('Editar plantilla', { detailEdit: checklist.id }, 'manage_checklist', !isEditableStatus(checklist)));
+  const evaluate = workflowButton(state.evaluating ? 'Cancelar evaluación' : 'Iniciar evaluación', { detailEvaluate: checklist.id }, 'execute_inspection', normalized !== 'approved');
+  evaluate.classList.add('primary');
+  actions.appendChild(evaluate);
+  if(['draft', 'rejected'].includes(normalized)){
+    actions.appendChild(workflowButton('Enviar a aprobación', { detailSubmit: checklist.id }, 'submit_checklist', !context.criteriaCount));
+  }
+  if(normalized === 'pending_approval'){
+    actions.appendChild(workflowButton('Aprobar', { detailApprove: checklist.id }, 'approve_checklist', false));
+    actions.appendChild(workflowButton('Rechazar', { detailReject: checklist.id }, 'reject_checklist', false));
+  }
+  if(normalized === 'approved'){
+    actions.appendChild(workflowButton('Nueva versión', { detailVersion: checklist.id }, 'version_checklist', false));
+  }
+  applyPermissionState(actions, role, context);
+  applyStateDisables(actions);
   head.append(description, meta, actions);
   body.appendChild(head);
+  permissionNotice(body, 'manage_checklist');
 
   if(state.evaluating) renderEvaluationForm(body, checklist);
   else renderCriteriaPreview(body, checklist);
@@ -657,6 +820,60 @@ function saveEvaluation(checklist){
   renderDetail();
 }
 
+function rejectionJustification(){
+  const value = typeof globalThis.prompt === 'function' ? globalThis.prompt('Justificación del rechazo') : '';
+  if(value === null) return null;
+  const reason = String(value).trim();
+  if(!reason){
+    setFormError('La justificación es obligatoria para rechazar.');
+    return null;
+  }
+  return reason;
+}
+
+function rerenderAfterWorkflow(){
+  renderSummary();
+  renderCards();
+  const detailPanel = qs('checklist-detail-panel');
+  if(detailPanel && !detailPanel.hidden) renderDetail();
+  else renderChecklists();
+}
+
+function handleChecklistWorkflowAction(button){
+  const role = activeRole();
+  const id = button.dataset.checklistSubmit || button.dataset.checklistApprove || button.dataset.checklistReject || button.dataset.checklistVersion || button.dataset.checklistDelete
+    || button.dataset.detailSubmit || button.dataset.detailApprove || button.dataset.detailReject || button.dataset.detailVersion;
+  const checklist = id ? checklistById(id) : null;
+  if(!checklist) return false;
+  const context = checklistContext(checklist);
+  const actions = {
+    checklistSubmit: ['submit_checklist', () => invoke('submitChecklistForApproval', id, role)],
+    checklistApprove: ['approve_checklist', () => invoke('approveChecklist', id, role)],
+    checklistReject: ['reject_checklist', () => invoke('rejectChecklist', id, role, rejectionJustification())],
+    checklistVersion: ['version_checklist', () => invoke('duplicateChecklistVersion', id, role)],
+    checklistDelete: ['delete_checklist', () => {
+      if(!window.confirm('¿Eliminar esta lista de verificación?')) return null;
+      return invoke('deleteChecklist', id, role);
+    }],
+    detailSubmit: ['submit_checklist', () => invoke('submitChecklistForApproval', id, role)],
+    detailApprove: ['approve_checklist', () => invoke('approveChecklist', id, role)],
+    detailReject: ['reject_checklist', () => invoke('rejectChecklist', id, role, rejectionJustification())],
+    detailVersion: ['version_checklist', () => invoke('duplicateChecklistVersion', id, role)]
+  };
+  const entry = Object.entries(actions).find(([key]) => button.dataset[key]);
+  if(!entry) return false;
+  const [, [permission, run]] = entry;
+  setFormError('');
+  try{
+    assertCan(role, permission, context);
+    if(run() === null) return true;
+    rerenderAfterWorkflow();
+  }catch(error){
+    setFormError(error.message);
+  }
+  return true;
+}
+
 function openDetail(id, evaluate = false){
   const checklist = checklistById(id);
   if(!checklist) return;
@@ -678,6 +895,14 @@ export function renderChecklists(){
 }
 
 export function initChecklistManager(){
+  const root = qs('view-quality-checklists');
+  if(root && root.dataset.wired === 'true') return;
+  if(root) root.dataset.wired = 'true';
+  syncStatusControls();
+  ['checklist-create', 'checklist-name', 'checklist-category', 'checklist-description', 'checklist-save', 'criterion-name', 'criterion-description', 'criterion-critical', 'criterion-add'].forEach(id => {
+    const control = qs(id);
+    if(control) control.setAttribute('data-permission', 'manage_checklist');
+  });
   const create = qs('checklist-create');
   if(create) create.addEventListener('click', () => openEditor());
   const editorBack = qs('checklist-editor-back');
@@ -705,21 +930,17 @@ export function initChecklistManager(){
   if(cards) cards.addEventListener('click', event => {
     const button = event.target.closest('button');
     if(!button) return;
+    if(handleChecklistWorkflowAction(button)) return;
     if(button.dataset.checklistView) openDetail(button.dataset.checklistView);
     else if(button.dataset.checklistEvaluate) openDetail(button.dataset.checklistEvaluate, true);
     else if(button.dataset.checklistEdit) openEditor(button.dataset.checklistEdit);
-    else if(button.dataset.checklistDelete){
-      if(window.confirm('¿Eliminar esta lista de verificación?')){
-        deleteChecklist(button.dataset.checklistDelete);
-        renderAll();
-      }
-    }
   });
 
   const detailBody = qs('checklist-detail-body');
   if(detailBody) detailBody.addEventListener('click', event => {
     const button = event.target.closest('button');
     if(!button) return;
+    if(handleChecklistWorkflowAction(button)) return;
     if(button.dataset.detailEdit) openEditor(button.dataset.detailEdit);
     else if(button.dataset.detailEvaluate){
       const id = button.dataset.detailEvaluate;

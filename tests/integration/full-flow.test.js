@@ -1,82 +1,166 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  ensureSeedData,
-  loadCollection
-} from '../../src/storage.js';
-import { bootQualityApp, qs, submit } from '../support/quality-dom.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import * as q from '../../src/storage.js';
+import { pendingLotsRows } from '../../src/components/pending-lots.js';
+import { filterInspections, historyCsv } from '../../src/components/inspection-history.js';
 
-let dom;
+const store = new Map();
+globalThis.localStorage = {
+  getItem: (key) => (store.has(key) ? store.get(key) : null),
+  setItem: (key, value) => store.set(key, String(value)),
+  removeItem: (key) => store.delete(key),
+  clear: () => store.clear()
+};
 
-beforeEach(async () => {
-  dom = await bootQualityApp();
-  ensureSeedData();
+function approvedPlan(name, isCritical = true){
+  const plan = q.addPlan({ plan_name: name, product_id: 'prod-001', applicable_stage: 'incoming' });
+  q.addCriterion({
+    inspection_plan_id: plan.inspection_plan_id,
+    criteria_name: 'Peso',
+    expected_value: 10,
+    tolerance: 1,
+    unit: 'kg',
+    comparison_type: 'range',
+    is_critical: isCritical
+  });
+  q.submitPlanForApproval(plan.inspection_plan_id, 'emp-001');
+  q.approvePlan(plan.inspection_plan_id, 'jefe_calidad');
+  return { plan, criterion: q.planCriteria(plan.inspection_plan_id)[0] };
+}
+
+function runInspection(plan, criterion, reference, measuredValue, passFail, decision, justification){
+  const inspection = q.addInspection({
+    inspection_plan_id: plan.inspection_plan_id,
+    inspector_id: 'emp-001',
+    reference_module: 'goods_receipt',
+    reference_id: reference,
+    inspection_date: '2026-11-09'
+  });
+  q.setInspectionResults(inspection.inspection_id, [{
+    criteria_id: criterion.criteria_id,
+    measured_value: measuredValue,
+    pass_fail: passFail
+  }]);
+  const submitted = q.submitInspectionForReview(inspection.inspection_id, 'emp-001');
+  const reviewed = q.reviewInspection(inspection.inspection_id, decision, 'jefe_calidad', justification);
+  return { inspection, submitted, reviewed };
+}
+
+beforeEach(() => {
+  store.clear();
+  q.ensureSeedData();
+  q.setActiveRole('jefe_calidad');
 });
 
-afterEach(() => {
-  dom.window.close();
-});
+describe('full quality flow', () => {
+  it('goes from pending lot to rejected inspection, non-conformance and approved CAPA with history', () => {
+    expect(pendingLotsRows().map(row => row.reference_id)).toContain('gr-001');
+    const { plan, criterion } = approvedPlan('Plan integral');
 
-describe('Full quality flow', () => {
-  it('goes from plan creation to pending lot inspection, non-conformance, CAPA and history', () => {
-    qs('nav-quality-plans').click();
+    const inspection = q.addInspection({
+      inspection_plan_id: plan.inspection_plan_id,
+      inspector_id: 'emp-001',
+      reference_module: 'goods_receipt',
+      reference_id: 'gr-001',
+      inspection_date: '2026-11-09'
+    });
+    q.setInspectionResults(inspection.inspection_id, [{
+      criteria_id: criterion.criteria_id,
+      measured_value: 99,
+      pass_fail: false
+    }]);
+    const submitted = q.submitInspectionForReview(inspection.inspection_id, 'emp-001');
+    expect(submitted.proposed_result).toBe('failed');
+    expect(pendingLotsRows().map(row => row.reference_id)).toContain('gr-001');
 
-    qs('plan-name').value = 'Plan integral';
-    qs('plan-product').value = 'prod-001';
-    qs('plan-stage').value = 'incoming';
-    submit(dom.window, 'plan-form');
-
-    const plan = loadCollection('quality_inspection_plans')[0];
-    expect(plan).toBeDefined();
-    expect(plan.plan_name).toBe('Plan integral');
-
-    qs('criteria-plan').value = plan.inspection_plan_id;
-    qs('criteria-plan').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    qs('criteria-name').value = 'Peso';
-    qs('criteria-expected').value = '10';
-    qs('criteria-tolerance').value = '1';
-    qs('criteria-unit').value = 'kg';
-    qs('criteria-comparison').value = 'range';
-    qs('criteria-critical').checked = true;
-    submit(dom.window, 'criteria-form');
-
-    expect(loadCollection('quality_inspection_criteria').length).toBe(1);
-
-    qs('nav-quality-lots').click();
-    qs('pending-lots-body').querySelector('button[data-inspect-reference="gr-001"]').click();
-
-    qs('inspection-plan').value = plan.inspection_plan_id;
-    qs('inspection-plan').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    qs('inspection-inspector').value = 'emp-001';
-    qs('inspection-date').value = '2026-11-09';
-    const measurement = qs('inspection-measurements').querySelector('input[data-criteria-id]');
-    measurement.value = '99';
-    measurement.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-    qs('inspection-complete').click();
-
-    const inspection = loadCollection('quality_inspections')[0];
-    expect(inspection.inspection_status).toBe('completed');
-    expect(inspection.overall_result).toBe('failed');
-
-    const nc = loadCollection('non_conformances')[0];
-    expect(nc).toBeDefined();
+    const reviewed = q.reviewInspection(inspection.inspection_id, 'rejected', 'jefe_calidad', 'Lote conforme no');
+    expect(reviewed.inspection_status).toBe('completed');
+    expect(reviewed.overall_result).toBe('failed');
+    expect(pendingLotsRows().map(row => row.reference_id)).not.toContain('gr-001');
+    const nc = q.loadCollection('non_conformances')[0];
     expect(nc.status).toBe('open');
 
-    qs('nav-quality-nc').click();
-    qs('capa-nc').value = nc.non_conformance_id;
-    qs('capa-responsible').value = 'emp-003';
-    qs('capa-description').value = 'Reprocesar el lote';
-    qs('capa-root').value = 'Falla de calibración';
-    qs('capa-type').value = 'rework';
-    qs('capa-due').value = '2099-01-01';
-    qs('capa-status').value = 'pending';
-    submit(dom.window, 'capa-form');
+    let capa = q.addCorrectiveAction({
+      non_conformance_id: nc.non_conformance_id,
+      responsible_employee_id: 'emp-003',
+      action_description: 'Reprocesar lote',
+      root_cause: 'Calibración',
+      action_type: 'rework',
+      due_date: '2099-01-01',
+      progress: 0,
+      status: 'pending'
+    });
+    capa = q.updateCorrectiveAction(capa.corrective_action_id, { status: 'in_progress', progress: 50 });
+    capa = q.updateCorrectiveAction(capa.corrective_action_id, { status: 'completed', progress: 100 });
+    capa = q.requestCapaClosure(capa.corrective_action_id, 'emp-003');
+    capa = q.registerCapaEffectiveness(capa.corrective_action_id, 'effective', 'Sin recurrencia', 'jefe_calidad');
+    capa = q.reviewCapaClosure(capa.corrective_action_id, 'approved', null, null, 'jefe_calidad');
+    expect(capa.closure_status).toBe('approved');
+    expect(q.capaEffectiveness()).toBe(100);
 
-    expect(loadCollection('corrective_actions').length).toBe(1);
+    const historyRows = filterInspections(q.loadCollection('quality_inspections'), {
+      module: 'goods_receipt',
+      lot: 'goods_receipt:gr-001',
+      from: '2026-11-01',
+      to: '2026-11-30',
+      search: ''
+    });
+    expect(historyRows).toHaveLength(1);
+    expect(historyRows[0].inspection_id).toBe(inspection.inspection_id);
+    const csv = historyCsv(historyRows);
+    expect(csv).toContain('gr-001');
+    expect(csv).toContain('Peso:99:No');
 
-    qs('nav-quality-history').click();
-    const row = qs('history-body').querySelector('tr');
-    expect(row.textContent).toContain('gr-001');
-    expect(row.textContent).toContain(nc.non_conformance_id);
-    expect(row.textContent).toContain('1 acción(es)');
+    const inspectionAudit = q.findAuditEntries({ entity_type: 'inspection', entity_id: inspection.inspection_id });
+    expect(inspectionAudit.filter(entry => entry.action === 'reject')).toHaveLength(1);
+    expect(inspectionAudit.filter(entry => entry.action === 'status_change' && entry.changed_field === 'overall_result')).toHaveLength(0);
+    const capaAudit = q.findAuditEntries({ entity_type: 'corrective_action', entity_id: capa.corrective_action_id });
+    expect(capaAudit.filter(entry => entry.action === 'approve' && entry.changed_field === 'closure_status')).toHaveLength(1);
+  });
+
+  it('does not create a non-conformance for conditional review or a completed inspection override', () => {
+    const main = approvedPlan('Plan principal');
+    runInspection(main.plan, main.criterion, 'gr-001', 99, false, 'rejected', 'Lote conforme no');
+    const ncCountAfterMain = q.loadCollection('non_conformances').length;
+    expect(ncCountAfterMain).toBe(1);
+
+    const conditional = approvedPlan('Plan condicional', false);
+    const conditionalFlow = runInspection(
+      conditional.plan,
+      conditional.criterion,
+      'gr-002',
+      99,
+      false,
+      'approved_conditional',
+      'Desviación no crítica'
+    );
+    expect(conditionalFlow.reviewed.overall_result).toBe('conditional');
+    expect(q.loadCollection('non_conformances')).toHaveLength(ncCountAfterMain);
+
+    const overrideSource = approvedPlan('Plan para override');
+    const passedFlow = runInspection(
+      overrideSource.plan,
+      overrideSource.criterion,
+      'gr-003',
+      10,
+      true,
+      'approved',
+      'Conforme'
+    );
+    const ncCountBeforeOverride = q.loadCollection('non_conformances').length;
+    const overridden = q.overrideInspection(
+      passedFlow.inspection.inspection_id,
+      'failed',
+      'Cambio manual controlado',
+      'jefe_calidad'
+    );
+    expect(overridden.inspection_status).toBe('completed');
+    expect(overridden.overall_result).toBe('failed');
+    expect(q.loadCollection('non_conformances')).toHaveLength(ncCountBeforeOverride);
+
+    const overrideAudit = q.findAuditEntries({
+      entity_type: 'inspection',
+      entity_id: passedFlow.inspection.inspection_id
+    });
+    expect(overrideAudit.filter(entry => entry.action === 'status_change' && entry.changed_field === 'overall_result')).toHaveLength(1);
   });
 });

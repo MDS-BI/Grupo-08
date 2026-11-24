@@ -11,8 +11,13 @@ import {
   resetQualitySettings,
   addCriterion,
   updateCriterion,
-  deleteCriterion
+  deleteCriterion,
+  getActiveRole,
+  setActiveRole,
+  updateAlertRule,
+  deleteAlertRule
 } from '../storage.js';
+import { applyPermissionState, assertCan } from '../permissions.js';
 import { qs, escapeHtml, cell, actionButton } from './quality-utils.js';
 
 const CATALOG_META = Object.freeze({
@@ -36,6 +41,28 @@ const ID_SUFFIXES = Object.freeze({
   inspection_statuses: 'inspection-statuses',
   nc_statuses: 'nc-statuses',
   action_types: 'action-types'
+});
+
+const ALERT_METRIC_LABELS = Object.freeze({
+  approval_rate: 'Tasa de aprobación',
+  open_non_conformances: 'No conformidades abiertas',
+  overdue_capa: 'Acciones CAPA vencidas',
+  capa_effectiveness: 'Eficacia CAPA',
+  pending_inspections: 'Inspecciones pendientes'
+});
+
+const ALERT_OPERATOR_LABELS = Object.freeze({
+  lt: '<',
+  lte: '≤',
+  gt: '>',
+  gte: '≥',
+  eq: '='
+});
+
+const ALERT_SEVERITY_LABELS = Object.freeze({
+  info: 'Informativa',
+  warning: 'Advertencia',
+  critical: 'Crítica'
 });
 
 function catalogId(prefix, type){
@@ -219,10 +246,101 @@ function renderParameters(){
   setParamMessage('');
 }
 
+function ensureAlertSection(){
+  const view = qs('view-quality-settings');
+  if(!view) return null;
+  const content = view.querySelector('.qset-content') || view;
+  let section = qs('qset-alert-rules-section');
+  if(!section){
+    section = document.createElement('section');
+    section.id = 'qset-alert-rules-section';
+    section.className = 'card';
+    const heading = document.createElement('h2');
+    heading.id = 'qset-alert-rules-heading';
+    heading.textContent = 'Reglas de alerta configuradas';
+    const description = document.createElement('p');
+    description.className = 'muted';
+    description.textContent = 'Activa, desactiva o elimina las reglas existentes; la creación se gestiona desde el dashboard.';
+    const list = document.createElement('div');
+    list.id = 'qset-alert-rule-list';
+    list.className = 'empty';
+    section.append(heading, description, list);
+    content.appendChild(section);
+  }
+  return qs('qset-alert-rule-list');
+}
+
+function syncRoleSelectors(){
+  const role = getActiveRole();
+  ['quality-role', 'quality-settings-role'].forEach(id => {
+    const select = qs(id);
+    if(select) select.value = role;
+  });
+  return role;
+}
+
+function renderSettingsAlerts(){
+  const list = ensureAlertSection();
+  if(!list) return;
+  const rules = loadCollection('quality_alert_rules');
+  list.replaceChildren();
+  if(!rules.length){
+    list.className = 'empty';
+    list.textContent = 'No hay reglas de alerta configuradas.';
+    return;
+  }
+  list.className = '';
+  rules.forEach(rule => {
+    const item = document.createElement('div');
+    item.className = 'alert-rule-item';
+    item.dataset.qualityAlertRule = rule.id;
+    const info = document.createElement('div');
+    const title = document.createElement('strong');
+    const metric = ALERT_METRIC_LABELS[rule.metric] || rule.metric;
+    const operator = ALERT_OPERATOR_LABELS[rule.operator] || rule.operator;
+    title.textContent = `${metric} ${operator} ${rule.threshold}`;
+    const meta = document.createElement('div');
+    meta.className = 'muted';
+    const severity = ALERT_SEVERITY_LABELS[rule.severity] || rule.severity;
+    meta.textContent = `${severity} · ${rule.is_active !== false ? 'Activa' : 'Inactiva'}`;
+    info.append(title, meta);
+    const actions = document.createElement('div');
+    actions.className = 'table-actions';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'button secondary';
+    toggle.textContent = rule.is_active !== false ? 'Desactivar' : 'Activar';
+    toggle.dataset.qsetAlertToggle = rule.id;
+    toggle.dataset.alertToggle = rule.id;
+    toggle.dataset.permission = 'configure_alerts';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'button danger';
+    remove.textContent = 'Eliminar';
+    remove.dataset.qsetAlertDelete = rule.id;
+    remove.dataset.alertDelete = rule.id;
+    remove.dataset.permission = 'configure_alerts';
+    actions.append(toggle, remove);
+    item.append(info, actions);
+    list.appendChild(item);
+  });
+}
+
+function applySettingsPermissions(role = getActiveRole()){
+  const view = qs('view-quality-settings');
+  if(!view) return;
+  const reset = qs('qset-reset');
+  if(reset) reset.dataset.permission = 'clear_data';
+  applyPermissionState(view, role);
+}
+
 export function renderQualitySettings(){
   Object.keys(CATALOG_META).forEach(renderCatalogRows);
   renderCriteriaRows();
   renderParameters();
+  syncRoleSelectors();
+  renderSettingsAlerts();
+  applySettingsPermissions();
   showSection(currentSection);
 }
 
@@ -397,6 +515,31 @@ function resetSettings(){
   setParamMessage('Valores restablecidos correctamente.');
 }
 
+function handleSettingsAlertAction(event){
+  const button = event.target.closest('[data-qset-alert-toggle], [data-qset-alert-delete]');
+  if(!button) return;
+  const view = qs('view-quality-settings');
+  if(view && view.hidden) return;
+  const toggleId = button.dataset.qsetAlertToggle;
+  const deleteId = button.dataset.qsetAlertDelete;
+  if(!toggleId && !deleteId) return;
+  try{
+    assertCan(getActiveRole(), 'configure_alerts');
+    const id = toggleId || deleteId;
+    const rule = loadCollection('quality_alert_rules').find(item => item.id === id || item.alert_rule_id === id);
+    if(!rule) return;
+    if(deleteId){
+      if(!window.confirm(`¿Eliminar la regla "${ALERT_METRIC_LABELS[rule.metric] || rule.metric}"?`)) return;
+      deleteAlertRule(id);
+    }else{
+      updateAlertRule(id, { is_active: rule.is_active === false });
+    }
+    renderQualitySettings();
+  }catch(error){
+    if(window.alert) window.alert(error.message);
+  }
+}
+
 export function initQualitySettings(){
   if(wired) return;
   wired = true;
@@ -424,4 +567,18 @@ export function initQualitySettings(){
   if(paramsForm) paramsForm.addEventListener('submit', saveParameters);
   const reset = qs('qset-reset');
   if(reset) reset.addEventListener('click', resetSettings);
+  const settingsRole = qs('quality-settings-role');
+  if(settingsRole) settingsRole.addEventListener('change', () => {
+    setActiveRole(settingsRole.value);
+    syncRoleSelectors();
+    renderQualitySettings();
+  });
+  document.addEventListener('quality:role-changed', () => {
+    syncRoleSelectors();
+    const view = qs('view-quality-settings');
+    if(view && !view.hidden) renderQualitySettings();
+    else applySettingsPermissions();
+  });
+  document.addEventListener('click', handleSettingsAlertAction);
+  renderQualitySettings();
 }

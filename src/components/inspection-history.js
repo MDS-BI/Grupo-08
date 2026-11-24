@@ -1,3 +1,4 @@
+import * as storage from '../storage.js';
 import {
   loadCollection,
   externalDocuments,
@@ -19,6 +20,32 @@ import {
 } from './quality-utils.js';
 import { rowsToCsv, downloadContent, safeFilenamePart } from './csv.js';
 import { downloadEvidence } from './evidence.js';
+import { can, applyPermissionState } from '../permissions.js';
+import { decisionResult } from '../quality-status.js';
+import { renderStatusBadge } from './status-badge.js';
+
+function activeRole(){
+  const getter = storage.getActiveRole;
+  if(typeof getter === 'function'){
+    try{ return getter(); }catch{ return 'jefe_calidad'; }
+  }
+  return 'jefe_calidad';
+}
+
+function finalResult(inspection){
+  return decisionResult(inspection.review_decision)
+    || decisionResult(inspection.reviewDecision)
+    || inspection.overall_result
+    || inspection.overallResult
+    || inspection.proposed_result
+    || inspection.proposedResult
+    || null;
+}
+
+function quarantineLabel(nc, capas){
+  if(!nc) return '—';
+  return capas.length ? 'En tratamiento' : 'En cuarentena';
+}
 
 export function currentFilters(){
   const search = qs('history-search');
@@ -34,6 +61,7 @@ export function currentFilters(){
 export function filterInspections(inspections, filters){
   const maps = filters.search ? buildReferenceMaps() : null;
   return inspections.filter(inspection => {
+    if(inspection.inspection_status !== 'completed' || !finalResult(inspection)) return false;
     if(filters.module && inspection.reference_module !== filters.module) return false;
     if(filters.lot){
       const [module, referenceId] = filters.lot.split(':');
@@ -81,7 +109,7 @@ export function buildHistoryCsv(rows, maps, results){
       plan ? stageLabel(plan.applicable_stage) : '—',
       inspection.inspection_date,
       employeeName(maps, inspection.inspector_id),
-      resultLabel(inspection.overall_result),
+      resultLabel(finalResult(inspection)),
       statusLabel(inspection.inspection_status),
       inspectionResultSummary(inspection.inspection_id, maps, results)
     ];
@@ -170,6 +198,13 @@ export function renderHistory(){
   const rows = filterInspections(loadCollection('quality_inspections'), filters);
 
   tbody.innerHTML = '';
+  const headerRow = tbody.closest('table') && tbody.closest('table').querySelector('thead tr');
+  if(headerRow && !headerRow.querySelector('[data-history-quarantine]')){
+    const quarantineHeader = document.createElement('th');
+    quarantineHeader.dataset.historyQuarantine = 'true';
+    quarantineHeader.textContent = 'Cuarentena';
+    headerRow.appendChild(quarantineHeader);
+  }
   rows.forEach(inspection => {
     const tr = document.createElement('tr');
     const plan = maps.plans.get(inspection.inspection_plan_id);
@@ -178,8 +213,10 @@ export function renderHistory(){
     tr.appendChild(cell(plan ? productName(maps, plan.product_id) : '—'));
     tr.appendChild(cell(planName(maps, inspection.inspection_plan_id)));
     tr.appendChild(cell(employeeName(maps, inspection.inspector_id)));
-    tr.appendChild(cell(statusLabel(inspection.inspection_status)));
-    tr.appendChild(cell(resultLabel(inspection.overall_result)));
+    const statusCell = cell(statusLabel(inspection.inspection_status));
+    statusCell.appendChild(renderStatusBadge('completed'));
+    tr.appendChild(statusCell);
+    tr.appendChild(cell(resultLabel(finalResult(inspection))));
 
     const nc = ncs.find(n => n.inspection_id === inspection.inspection_id);
     tr.appendChild(cell(nc ? nc.non_conformance_id : '—'));
@@ -193,13 +230,17 @@ export function renderHistory(){
       evidenceCell.textContent = '—';
     } else {
       evidence.forEach(record => {
-        evidenceCell.appendChild(actionButton(record.file_name, 'secondary', { evidenceDownload: record.id }));
+        const button = actionButton(record.file_name, 'secondary', { evidenceDownload: record.id });
+        button.dataset.permission = 'view_history_detail';
+        evidenceCell.appendChild(button);
       });
     }
     tr.appendChild(evidenceCell);
+    tr.appendChild(cell(quarantineLabel(nc, ncCapas)));
 
     tbody.appendChild(tr);
   });
+  applyPermissionState(tbody, activeRole());
 
   if(empty){
     empty.hidden = rows.length > 0;
@@ -246,7 +287,16 @@ export function initInspectionHistory(){
   const search = qs('history-search');
   if(search) search.addEventListener('input', () => renderHistory());
   const exportButton = qs('history-export');
-  if(exportButton) exportButton.addEventListener('click', () => exportHistoryCsv());
+  if(exportButton){
+    exportButton.dataset.permission = 'export_history';
+    exportButton.addEventListener('click', () => exportHistoryCsv());
+  }
   const body = qs('history-body');
   if(body) body.addEventListener('click', handleHistoryBodyClick);
+  applyPermissionState(qs('view-quality-history') || document, activeRole());
+  if(!can(activeRole(), 'view_history_detail') && errorNode()) errorNode().textContent = 'Tu rol no puede consultar el detalle de evidencia.';
+}
+
+function errorNode(){
+  return qs('history-error');
 }

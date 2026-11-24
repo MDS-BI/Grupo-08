@@ -6,7 +6,11 @@ import {
   addPlan,
   addCriterion,
   addInspection,
-  completeInspection,
+  submitPlanForApproval,
+  approvePlan,
+  setInspectionResults,
+  submitInspectionForReview,
+  reviewInspection,
   planCriteria,
   planHasCriteria,
   planHasInspections,
@@ -76,6 +80,8 @@ describe('quality plan configuration rules', () => {
       comparison_type: 'range',
       is_critical: true
     });
+    submitPlanForApproval(plan.inspection_plan_id, 'emp-001');
+    approvePlan(plan.inspection_plan_id, 'jefe_calidad');
     const inspection = addInspection({
       inspection_plan_id: plan.inspection_plan_id,
       inspector_id: 'emp-001',
@@ -83,11 +89,13 @@ describe('quality plan configuration rules', () => {
       reference_id: 'gr-001',
       inspection_date: '2026-11-09'
     });
-    completeInspection(inspection.inspection_id, 'passed', [{
+    setInspectionResults(inspection.inspection_id, [{
       criteria_id: criterion.criteria_id,
       measured_value: 10,
       pass_fail: true
     }]);
+    submitInspectionForReview(inspection.inspection_id, 'emp-001');
+    reviewInspection(inspection.inspection_id, 'approved', 'jefe_calidad', 'Inspección conforme');
 
     expect(planHasInspections(plan.inspection_plan_id)).toBe(true);
     const copy = duplicatePlan(plan.id);

@@ -4,6 +4,9 @@ import {
   loadExternal,
   addPlan,
   addCriterion,
+  approvePlan,
+  submitPlanForApproval,
+  addChecklist,
   addInspection,
   completeInspection,
   addNonConformance,
@@ -50,10 +53,21 @@ function buildData(){
     comparison_type: 'range',
     is_critical: true
   });
+  [incoming, final].forEach(plan => {
+    submitPlanForApproval(plan.inspection_plan_id);
+    approvePlan(plan.inspection_plan_id);
+  });
+  const checklist = addChecklist({
+    name: 'Checklist de reportes',
+    category: 'general',
+    status: 'approved',
+    criteria: [{ name: 'Revisión documental' }]
+  });
 
   const register = (plan, criterion, date, inspectorId, result) => {
     const inspection = addInspection({
       inspection_plan_id: plan.inspection_plan_id,
+      checklist_id: checklist.checklist_id,
       inspector_id: inspectorId,
       reference_module: 'goods_receipt',
       reference_id: referenceId,
@@ -125,6 +139,9 @@ describe('Quality reports and statistics workspace', () => {
     expect(qs('rep-chart-results').textContent).toContain('Aprobado');
     expect(qs('rep-chart-compliance').textContent).toContain('Objetivo 90%');
     expect(qs('rep-range-note').textContent).toContain('Período:');
+    expect(qs('rep-active-filters').textContent).toContain('Filtros activos:');
+    expect(qs('rep-active-filters').textContent).toContain('Últimos 12 meses');
+    expect(qs('rep-empty-state').hidden).toBe(true);
 
     const model = computeReportModel();
     const now = new Date();
@@ -151,6 +168,9 @@ describe('Quality reports and statistics workspace', () => {
     change('rep-end', isoDaysAgo(1), 'input');
     expect(qs('rep-kpis').textContent).toContain('Total de inspecciones0');
     expect(qs('rep-range-note').textContent).toContain('Período:');
+    change('rep-category', 'dimensional');
+    expect(qs('rep-empty-state').hidden).toBe(false);
+    expect(qs('rep-empty-state').textContent).toContain('No hay datos para los filtros seleccionados');
   });
 
   it('exports an Excel-compatible report and sends PDF to browser printing', () => {

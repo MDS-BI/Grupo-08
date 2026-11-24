@@ -40,8 +40,15 @@ beforeEach(() => {
 
 describe('quality audit log - validation and query', () => {
   it('exposes the entity and action catalogues', () => {
-    expect([...AUDIT_ENTITIES]).toEqual(['inspection', 'non_conformance', 'corrective_action']);
-    expect([...AUDIT_ACTIONS]).toEqual(['create', 'update', 'status_change', 'delete']);
+    expect([...AUDIT_ENTITIES]).toEqual([
+      'inspection_plan',
+      'checklist',
+      'document',
+      'inspection',
+      'non_conformance',
+      'corrective_action'
+    ]);
+    expect([...AUDIT_ACTIONS]).toEqual(['create', 'update', 'review', 'approve', 'reject', 'status_change', 'delete']);
   });
 
   it('rejects entries with missing mandatory fields or a non-ISO timestamp', () => {

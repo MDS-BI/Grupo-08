@@ -6,6 +6,7 @@ import {
   validateInspectionPlan,
   validateCriterion,
   validateCorrectiveAction,
+  validateInspection,
   addPlan,
   updatePlan,
   deletePlan,
@@ -13,14 +14,22 @@ import {
   addCriterion,
   deleteCriterion,
   addInspection,
-  completeInspection,
+  submitPlanForApproval,
+  approvePlan,
+  setInspectionResults,
+  submitInspectionForReview,
+  reviewInspection,
   saveDraftInspection,
   deleteInspection,
   loadCollection,
+  saveCollection,
   addNonConformance,
   deleteNonConformance,
   addCorrectiveAction,
   updateCorrectiveAction,
+  requestCapaClosure,
+  registerCapaEffectiveness,
+  reviewCapaClosure,
   isCapaOverdue,
   canOverrideInspection,
   overrideInspection
@@ -33,6 +42,26 @@ globalThis.localStorage = {
   removeItem: (k) => store.delete(k),
   clear: () => store.clear()
 };
+
+function findPlan(plan){
+  return loadCollection('quality_inspection_plans').find(item => item.inspection_plan_id === plan.inspection_plan_id);
+}
+
+function ensureApprovedPlan(plan){
+  const current = findPlan(plan);
+  if(!current || current.status === 'approved') return current || plan;
+  submitPlanForApproval(plan.inspection_plan_id, 'emp-001');
+  return approvePlan(plan.inspection_plan_id, 'jefe_calidad');
+}
+
+function forceApprovePlan(plan){
+  const plans = loadCollection('quality_inspection_plans');
+  const idx = plans.findIndex(item => item.inspection_plan_id === plan.inspection_plan_id);
+  const approved = { ...plans[idx], status: 'approved' };
+  plans[idx] = approved;
+  saveCollection('quality_inspection_plans', plans);
+  return approved;
+}
 
 function makePlan(overrides = {}){
   return addPlan({
@@ -57,6 +86,7 @@ function makeCriterion(plan, overrides = {}){
 }
 
 function makeInspection(plan, overrides = {}){
+  ensureApprovedPlan(plan);
   return addInspection({
     inspection_plan_id: plan.inspection_plan_id,
     inspector_id: 'emp-001',
@@ -68,11 +98,18 @@ function makeInspection(plan, overrides = {}){
 }
 
 function complete(inspection, criterion, measured, result){
-  return completeInspection(inspection.inspection_id, result, [{
+  setInspectionResults(inspection.inspection_id, [{
     criteria_id: criterion.criteria_id,
     measured_value: measured,
     pass_fail: result === 'passed'
   }]);
+  submitInspectionForReview(inspection.inspection_id, 'emp-001');
+  const decision = result === 'passed' ? 'approved' : result === 'conditional' ? 'approved_conditional' : 'rejected';
+  const reviewed = reviewInspection(inspection.inspection_id, decision, 'jefe_calidad', 'Revisión de prueba');
+  return {
+    inspection: reviewed,
+    results: loadCollection('quality_inspection_results').filter(item => item.inspection_id === inspection.inspection_id)
+  };
 }
 
 beforeEach(() => {
@@ -151,6 +188,7 @@ describe('quality plans and criteria', () => {
 describe('quality inspections', () => {
   it('rejects orphan references and plans without criteria', () => {
     const plan = makePlan();
+    forceApprovePlan(plan);
     const base = {
       inspection_plan_id: plan.inspection_plan_id,
       inspector_id: 'emp-001',
@@ -158,6 +196,7 @@ describe('quality inspections', () => {
       reference_id: 'gr-001',
       inspection_date: '2026-11-09'
     };
+    expect(validateInspection(base).errors.inspection_plan_id).toContain('criterio');
     expect(() => addInspection(base)).toThrow();
     makeCriterion(plan);
     expect(() => addInspection({ ...base, reference_id: 'gr-999' })).toThrow();
@@ -257,10 +296,16 @@ describe('non-conformances and CAPA', () => {
     expect(isCapaOverdue(action, '2026-11-09')).toBe(true);
     expect(action.status).toBe('pending');
 
+    updateCorrectiveAction(action.id, { status: 'in_progress' });
     updateCorrectiveAction(action.id, { status: 'completed' });
-    const updated = loadCollection('corrective_actions').find(a => a.id === action.id);
-    expect(isCapaOverdue(updated, '2026-11-09')).toBe(false);
+    let updated = loadCollection('corrective_actions').find(a => a.id === action.id);
+    expect(isCapaOverdue(updated, '2026-11-09')).toBe(true);
     expect(updated.completed_at).toBeDefined();
+
+    const requested = requestCapaClosure(action.corrective_action_id, 'emp-003');
+    registerCapaEffectiveness(requested.corrective_action_id, 'effective', 'Verificado', 'jefe_calidad');
+    updated = reviewCapaClosure(requested.corrective_action_id, 'approved', null, null, 'jefe_calidad');
+    expect(isCapaOverdue(updated, '2026-11-09')).toBe(false);
   });
 
   it('cascades CAPA deletion when the non-conformance is deleted', () => {

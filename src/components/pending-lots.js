@@ -1,5 +1,27 @@
+import * as storage from '../storage.js';
 import { externalDocuments, loadCollection, derivePendingLots } from '../storage.js';
 import { buildReferenceMaps, productName, moduleLabel, qs, cell, actionButton } from './quality-utils.js';
+import { can, applyPermissionState } from '../permissions.js';
+import { renderStatusBadge } from './status-badge.js';
+
+function activeRole(){
+  const getter = storage.getActiveRole;
+  if(typeof getter === 'function'){
+    try{ return getter(); }catch{ return 'jefe_calidad'; }
+  }
+  return 'jefe_calidad';
+}
+
+function lotState(doc){
+  const inspections = loadCollection('quality_inspections')
+    .filter(inspection => inspection.reference_module === doc.reference_module && inspection.reference_id === doc.reference_id)
+    .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+  const inspection = inspections[0];
+  if(!inspection) return { status: '', label: 'Pendiente', action: 'Inspeccionar', disabled: false };
+  if(inspection.inspection_status === 'draft') return { status: 'draft', label: 'Borrador', action: 'Continuar inspección', disabled: false };
+  if(inspection.inspection_status === 'pending_review') return { status: 'pending_review', label: 'Pendiente de revisión', action: 'En revisión', disabled: true };
+  return { status: '', label: 'Pendiente', action: 'Inspeccionar', disabled: false };
+}
 
 export function pendingLotsRows(){
   return derivePendingLots(externalDocuments(), loadCollection('quality_inspections'));
@@ -26,22 +48,36 @@ export function renderPendingLots(){
     tr.appendChild(cell(productName(maps, doc.product_id)));
     tr.appendChild(cell(doc.date || '—'));
 
+    const state = lotState(doc);
     const status = document.createElement('td');
-    const badge = document.createElement('span');
-    badge.className = 'status-badge';
-    badge.textContent = 'Pendiente';
-    status.appendChild(badge);
+    if(state.status){
+      status.appendChild(renderStatusBadge(state.status, { label: state.label }));
+    }else{
+      const badge = document.createElement('span');
+      badge.className = 'status-badge';
+      badge.textContent = state.label;
+      status.appendChild(badge);
+    }
     tr.appendChild(status);
 
     const action = document.createElement('td');
-    action.appendChild(actionButton('Inspeccionar', 'secondary', {
+    const button = actionButton(state.action, 'secondary', {
       inspectModule: doc.reference_module,
       inspectReference: doc.reference_id
-    }));
+    });
+    if(state.disabled){
+      button.disabled = true;
+      button.dataset.stateDisabled = 'true';
+    }else if(can(activeRole(), 'execute_inspection')){
+      button.dataset.permission = 'execute_inspection';
+    }
+    action.appendChild(button);
     tr.appendChild(action);
 
     tbody.appendChild(tr);
   });
+  applyPermissionState(tbody, activeRole());
+  tbody.querySelectorAll('[data-state-disabled]').forEach(button => { button.disabled = true; });
 
   if(empty){
     empty.hidden = rows.length > 0;

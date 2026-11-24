@@ -1,11 +1,13 @@
 import {
   DEFECT_TYPES,
   findAuditEntries,
+  getActiveRole,
   loadCollection,
   loadExternal,
   qualityCatalog,
   qualityParameter
 } from '../storage.js';
+import { applyPermissionState } from '../permissions.js';
 import { employeeName, qs } from './quality-utils.js';
 import { rowsToCsv, downloadContent, safeFilenamePart } from './csv.js';
 
@@ -92,6 +94,62 @@ function collectFilters(){
     category: qs('rep-category')?.value || '',
     inspectionType: qs('rep-type')?.value || ''
   };
+}
+
+function ensureReportStatusNodes(){
+  const error = qs('rep-export-error');
+  let filtersNode = qs('rep-active-filters');
+  if(!filtersNode && error && error.parentNode){
+    filtersNode = document.createElement('div');
+    filtersNode.id = 'rep-active-filters';
+    filtersNode.className = 'muted';
+    filtersNode.setAttribute('aria-live', 'polite');
+    error.parentNode.insertBefore(filtersNode, error.nextSibling);
+  }
+  let emptyNode = qs('rep-empty-state');
+  const kpis = qs('rep-kpis');
+  if(!emptyNode && kpis && kpis.parentNode){
+    emptyNode = document.createElement('div');
+    emptyNode.id = 'rep-empty-state';
+    emptyNode.className = 'empty';
+    emptyNode.hidden = true;
+    kpis.parentNode.insertBefore(emptyNode, kpis);
+  }
+  return { filtersNode, emptyNode };
+}
+
+function selectedLabel(id){
+  const control = qs(id);
+  if(!control) return '—';
+  const option = control.selectedOptions && control.selectedOptions[0];
+  return option ? option.textContent.trim() : (control.value || '—');
+}
+
+function renderReportStatus(model){
+  const { filtersNode, emptyNode } = ensureReportStatusNodes();
+  if(filtersNode){
+    const period = selectedLabel('rep-period');
+    const category = model.filters.category ? (CATEGORY_LABELS[model.filters.category] || selectedLabel('rep-category')) : 'Todas';
+    const type = model.filters.inspectionType ? selectedLabel('rep-type') : 'Todos';
+    filtersNode.textContent = `Filtros activos: ${period} · Categoría: ${category} · Tipo: ${type} · ${model.range.label}`;
+  }
+  if(emptyNode){
+    const isEmpty = !model.inspections.length && !model.ncs.length;
+    emptyNode.hidden = !isEmpty;
+    emptyNode.textContent = isEmpty
+      ? 'No hay datos para los filtros seleccionados. Ajusta el período o las categorías para consultar otros resultados.'
+      : '';
+  }
+}
+
+function applyReportPermissions(){
+  const view = qs('view-quality-reports');
+  if(!view) return;
+  const excel = qs('rep-export-excel');
+  if(excel) excel.dataset.permission = 'export_reports';
+  const pdf = qs('rep-export-pdf');
+  if(pdf) pdf.dataset.permission = 'view_reports';
+  applyPermissionState(view, getActiveRole());
 }
 
 function resolveRange(filters, inspections, ncs){
@@ -607,6 +665,8 @@ export function renderQualityReports(){
   const model = computeReportModel();
   const note = qs('rep-range-note');
   if(note) note.textContent = `Período: ${model.range.label}`;
+  renderReportStatus(model);
+  applyReportPermissions();
   renderKpis(model);
   renderSummary(model);
   renderCharts(model);
@@ -693,4 +753,6 @@ export function initQualityReports(){
   });
   qs('rep-export-excel').addEventListener('click', exportReportsExcel);
   qs('rep-export-pdf').addEventListener('click', exportReportsPdf);
+  document.addEventListener('quality:role-changed', applyReportPermissions);
+  applyReportPermissions();
 }

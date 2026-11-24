@@ -4,17 +4,51 @@ import {
   addPlan,
   addCriterion,
   addInspection,
-  completeInspection,
+  submitPlanForApproval,
+  approvePlan,
+  setInspectionResults,
+  submitInspectionForReview,
+  reviewInspection,
   addCorrectiveAction,
-  loadCollection
+  updateCorrectiveAction,
+  requestCapaClosure,
+  registerCapaEffectiveness,
+  reviewCapaClosure,
+  loadCollection,
+  saveCollection
 } from '../../src/storage.js';
 import { bootQualityApp, qs } from '../support/quality-dom.js';
 
 let dom;
 let plan;
 let criterion;
+let conditionalCriterion;
 
-function runInspection(reference, result, measured = 10){
+function setupPlan(){
+  plan = addPlan({ plan_name: 'Plan de recepción', product_id: 'prod-001', applicable_stage: 'incoming' });
+  criterion = addCriterion({
+    inspection_plan_id: plan.inspection_plan_id,
+    criteria_name: 'Peso',
+    expected_value: 10,
+    tolerance: 1,
+    unit: 'kg',
+    comparison_type: 'range',
+    is_critical: true
+  });
+  conditionalCriterion = addCriterion({
+    inspection_plan_id: plan.inspection_plan_id,
+    criteria_name: 'Etiqueta',
+    expected_value: 10,
+    tolerance: 1,
+    unit: 'kg',
+    comparison_type: 'range',
+    is_critical: false
+  });
+  submitPlanForApproval(plan.inspection_plan_id, 'emp-001');
+  approvePlan(plan.inspection_plan_id, 'jefe_calidad');
+}
+
+function runInspection(reference, result){
   const inspection = addInspection({
     inspection_plan_id: plan.inspection_plan_id,
     inspector_id: 'emp-001',
@@ -22,12 +56,71 @@ function runInspection(reference, result, measured = 10){
     reference_id: reference,
     inspection_date: '2026-11-09'
   });
-  completeInspection(inspection.inspection_id, result, [{
-    criteria_id: criterion.criteria_id,
-    measured_value: measured,
-    pass_fail: result === 'passed'
-  }]);
-  return inspection;
+  setInspectionResults(inspection.inspection_id, [
+    {
+      criteria_id: criterion.criteria_id,
+      measured_value: result === 'failed' ? 99 : 10,
+      pass_fail: result !== 'failed'
+    },
+    {
+      criteria_id: conditionalCriterion.criteria_id,
+      measured_value: result === 'conditional' ? 99 : 10,
+      pass_fail: result !== 'conditional'
+    }
+  ]);
+  submitInspectionForReview(inspection.inspection_id, 'emp-001');
+  const decision = result === 'passed' ? 'approved' : result === 'conditional' ? 'approved_conditional' : 'rejected';
+  return reviewInspection(inspection.inspection_id, decision, 'jefe_calidad', 'Revisión de prueba');
+}
+
+function closedCapa(nc, description, dueDate, effectiveness){
+  let action = addCorrectiveAction({
+    non_conformance_id: nc.non_conformance_id,
+    responsible_employee_id: 'emp-003',
+    action_description: description,
+    root_cause: 'Causa',
+    action_type: 'rework',
+    due_date: dueDate,
+    status: 'pending'
+  });
+  action = updateCorrectiveAction(action.corrective_action_id, { status: 'in_progress', progress: 50 });
+  action = updateCorrectiveAction(action.corrective_action_id, { status: 'completed', progress: 100 });
+  action = requestCapaClosure(action.corrective_action_id, 'emp-003');
+  action = registerCapaEffectiveness(action.corrective_action_id, effectiveness, 'Verificado', 'jefe_calidad');
+  return reviewCapaClosure(action.corrective_action_id, 'approved', null, null, 'jefe_calidad');
+}
+
+function seedCompletedInspections(count){
+  const now = new Date().toISOString();
+  const inspections = [];
+  for(let index = 0; index < count; index += 1){
+    const inspectionId = `dashboard-inspection-${index}`;
+    const date = `2026-10-${String((index % 28) + 1).padStart(2, '0')}`;
+    inspections.push({
+      id: `dashboard-id-${index}`,
+      inspection_id: inspectionId,
+      inspection_plan_id: plan.inspection_plan_id,
+      checklist_id: null,
+      checklist_version: null,
+      inspector_id: 'emp-001',
+      reference_module: 'goods_receipt',
+      reference_id: `gr-${String(index + 1).padStart(3, '0')}`,
+      inspection_date: date,
+      inspection_status: 'completed',
+      proposed_result: 'passed',
+      overall_result: 'passed',
+      review_decision: 'approved',
+      review_justification: 'Revisión de prueba',
+      reviewed_by: 'jefe_calidad',
+      reviewed_at: `${date}T12:00:00.000Z`,
+      submitted_by: 'emp-001',
+      submitted_at: `${date}T10:00:00.000Z`,
+      legacy_completed: false,
+      createdAt: now,
+      updatedAt: now
+    });
+  }
+  saveCollection('quality_inspections', inspections);
 }
 
 beforeEach(async () => {
@@ -41,7 +134,7 @@ afterEach(() => {
 
 describe('User Story 5 - quality dashboard', () => {
   it('shows clear empty states and zeroed KPIs without data', () => {
-    qs('nav-quality-dashboard').click();
+    qs('quality-dashboard').click();
     expect(qs('kpi-approval-rate').textContent).toBe('0%');
     expect(qs('kpi-open-nc').textContent).toBe('0');
     expect(qs('kpi-pending-inspections').textContent).toBe('0');
@@ -49,20 +142,11 @@ describe('User Story 5 - quality dashboard', () => {
   });
 
   it('computes KPIs, CAPA effectiveness, pending inspections and Pareto', () => {
-    plan = addPlan({ plan_name: 'Plan de recepción', product_id: 'prod-001', applicable_stage: 'incoming' });
-    criterion = addCriterion({
-      inspection_plan_id: plan.inspection_plan_id,
-      criteria_name: 'Peso',
-      expected_value: 10,
-      tolerance: 1,
-      unit: 'kg',
-      comparison_type: 'range',
-      is_critical: true
-    });
+    setupPlan();
 
     runInspection('gr-001', 'passed');
-    runInspection('gr-002', 'failed', 99);
-    runInspection('gr-003', 'conditional', 99);
+    runInspection('gr-002', 'failed');
+    runInspection('gr-003', 'conditional');
     addInspection({
       inspection_plan_id: plan.inspection_plan_id,
       inspector_id: 'emp-002',
@@ -72,24 +156,8 @@ describe('User Story 5 - quality dashboard', () => {
     });
 
     const nc = loadCollection('non_conformances')[0];
-    addCorrectiveAction({
-      non_conformance_id: nc.non_conformance_id,
-      responsible_employee_id: 'emp-003',
-      action_description: 'Acción a tiempo',
-      root_cause: 'Causa 1',
-      action_type: 'rework',
-      due_date: '2099-01-01',
-      status: 'completed'
-    });
-    addCorrectiveAction({
-      non_conformance_id: nc.non_conformance_id,
-      responsible_employee_id: 'emp-003',
-      action_description: 'Acción tardía',
-      root_cause: 'Causa 2',
-      action_type: 'rework',
-      due_date: '2000-01-01',
-      status: 'completed'
-    });
+    closedCapa(nc, 'Acción a tiempo', '2099-01-01', 'effective');
+    closedCapa(nc, 'Acción tardía', '2000-01-01', 'not_effective');
     addCorrectiveAction({
       non_conformance_id: nc.non_conformance_id,
       responsible_employee_id: 'emp-003',
@@ -100,7 +168,7 @@ describe('User Story 5 - quality dashboard', () => {
       status: 'pending'
     });
 
-    qs('nav-quality-dashboard').click();
+    qs('quality-dashboard').click();
 
     expect(qs('kpi-approval-rate').textContent).toBe('33.3%');
     expect(qs('kpi-open-nc').textContent).toBe('1');
@@ -115,20 +183,12 @@ describe('User Story 5 - quality dashboard', () => {
   });
 
   it('restricts individual inspector detail to the head-of-quality role', () => {
-    plan = addPlan({ plan_name: 'Plan de recepción', product_id: 'prod-001', applicable_stage: 'incoming' });
-    criterion = addCriterion({
-      inspection_plan_id: plan.inspection_plan_id,
-      criteria_name: 'Peso',
-      expected_value: 10,
-      tolerance: 1,
-      unit: 'kg',
-      comparison_type: 'range',
-      is_critical: true
-    });
+    setupPlan();
     runInspection('gr-001', 'passed');
-    localStorage.setItem('erp_quality:viewer_role', 'gerente');
+    qs('quality-role').value = 'gerente';
+    qs('quality-role').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
 
-    qs('nav-quality-dashboard').click();
+    qs('quality-dashboard').click();
     expect(qs('quality-role').value).toBe('gerente');
     qs('quality-role').value = 'inspector';
     qs('quality-role').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
@@ -147,5 +207,19 @@ describe('User Story 5 - quality dashboard', () => {
     expect(localStorage.getItem('erp_quality:viewer_role')).toBe('jefe_calidad');
     expect(qs('quality-inspector-detail').textContent).toContain('Ana Torres');
     expect(qs('quality-role').value).toBe('jefe_calidad');
+  });
+
+  it('renders dashboard metrics with 500 inspections within the SC-010 time budget', () => {
+    setupPlan();
+    seedCompletedInspections(500);
+
+    const startedAt = performance.now();
+    qs('quality-dashboard').click();
+    const elapsedMs = performance.now() - startedAt;
+
+    console.info(`[SC-010] dashboard con 500 inspecciones renderizado en ${elapsedMs.toFixed(2)} ms`);
+    expect(qs('kpi-approval-rate').textContent).toBe('100%');
+    expect(qs('kpi-pending-inspections').textContent).toBe('0');
+    expect(elapsedMs).toBeLessThan(2000);
   });
 });

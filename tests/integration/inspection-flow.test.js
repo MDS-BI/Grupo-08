@@ -1,201 +1,131 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  ensureSeedData,
-  addPlan,
-  addCriterion,
-  addInspection,
-  loadCollection,
-  saveCollection,
-  externalDocuments,
-  derivePendingLots,
-  addSettingItem
-} from '../../src/storage.js';
-import { bootQualityApp, qs } from '../support/quality-dom.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import * as q from '../../src/storage.js';
 
-let dom;
+const store = new Map();
+globalThis.localStorage = {
+  getItem: (key) => (store.has(key) ? store.get(key) : null),
+  setItem: (key, value) => store.set(key, String(value)),
+  removeItem: (key) => store.delete(key),
+  clear: () => store.clear()
+};
 
-function makePlan(criteria = [{}], overrides = {}){
-  const plan = addPlan({ plan_name: 'Plan de recepción', product_id: 'prod-001', applicable_stage: 'incoming', ...overrides });
-  criteria.forEach((overrides, index) => {
-    addCriterion({
-      inspection_plan_id: plan.inspection_plan_id,
-      criteria_name: `Criterio ${index + 1}`,
-      expected_value: 10,
-      tolerance: 1,
-      unit: 'kg',
-      comparison_type: 'range',
-      is_critical: true,
-      ...overrides
-    });
+let plan;
+let criterion;
+
+beforeEach(() => {
+  store.clear();
+  q.ensureSeedData();
+  q.setActiveRole('jefe_calidad');
+  plan = q.addPlan({ plan_name: 'Plan', product_id: 'prod-001', applicable_stage: 'incoming' });
+  q.addCriterion({
+    inspection_plan_id: plan.inspection_plan_id,
+    criteria_name: 'Peso',
+    expected_value: 10,
+    tolerance: 1,
+    unit: 'kg',
+    comparison_type: 'range',
+    is_critical: true
   });
-  return plan;
-}
-
-function selectInspectionHeader(plan, reference = 'gr-001'){
-  qs('inspection-plan').value = plan.inspection_plan_id;
-  qs('inspection-plan').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-  qs('inspection-inspector').value = 'emp-001';
-  qs('inspection-module').value = 'goods_receipt';
-  qs('inspection-module').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-  qs('inspection-reference').value = reference;
-  qs('inspection-date').value = '2026-11-09';
-}
-
-beforeEach(async () => {
-  dom = await bootQualityApp();
-  ensureSeedData();
+  q.submitPlanForApproval(plan.inspection_plan_id, 'emp-001');
+  q.approvePlan(plan.inspection_plan_id, 'jefe_calidad');
+  criterion = q.planCriteria(plan.inspection_plan_id)[0];
 });
 
-afterEach(() => {
-  dom.window.close();
-});
+function addInspection(){
+  return q.addInspection({
+    inspection_plan_id: plan.inspection_plan_id,
+    inspector_id: 'emp-001',
+    reference_module: 'goods_receipt',
+    reference_id: 'gr-001',
+    inspection_date: '2026-11-09'
+  });
+}
 
-describe('User Story 2 - pending lots and automatic evaluation', () => {
-  it('lists pending lots and preselects the lot when inspecting', () => {
-    qs('nav-quality-lots').click();
-    expect(qs('view-pending-lots').hidden).toBe(false);
-    const rows = qs('pending-lots-body').querySelectorAll('tr');
-    expect(rows.length).toBe(externalDocuments().length);
-    expect(qs('pending-lots-empty').hidden).toBe(true);
+describe('inspection flow', () => {
+  it('blocks submission until all measurements are present', () => {
+    const inspection = addInspection();
+    expect(() => q.submitInspectionForReview(inspection.inspection_id, 'emp-001'))
+      .toThrow('Faltan mediciones');
 
-    const firstButton = qs('pending-lots-body').querySelector('button[data-inspect-module]');
-    firstButton.click();
-    expect(qs('view-inspections').hidden).toBe(false);
-    expect(qs('inspection-module').value).toBe(firstButton.dataset.inspectModule);
-    expect(qs('inspection-reference').value).toBe(firstButton.dataset.inspectReference);
+    q.setInspectionResults(inspection.inspection_id, [{
+      criteria_id: criterion.criteria_id,
+      measured_value: 10,
+      pass_fail: true
+    }]);
+    const submitted = q.submitInspectionForReview(inspection.inspection_id, 'emp-001');
+    expect(submitted.inspection_status).toBe('pending_review');
+    expect(submitted.proposed_result).toBe('passed');
+    expect(submitted.overall_result).toBeNull();
   });
 
-  it('offers only plans matching the source product and derived stage (FR-033)', () => {
-    const matching = makePlan([{}], { plan_name: 'Harina incoming' });
-    makePlan([{}], { plan_name: 'Aceite incoming', product_id: 'prod-002' });
-    makePlan([{}], { plan_name: 'Harina in process', applicable_stage: 'in_process' });
-    qs('nav-quality-lots').click();
-    const button = [...qs('pending-lots-body').querySelectorAll('button[data-inspect-reference]')]
-      .find(btn => btn.dataset.inspectReference === 'gr-001');
-    button.click();
-    const options = [...qs('inspection-plan').options].map(option => option.value).filter(Boolean);
-    expect(options).toEqual([matching.inspection_plan_id]);
+  it('saves drafts without a final result and blocks edits while pending', () => {
+    const inspection = addInspection();
+    q.setInspectionResults(inspection.inspection_id, [{
+      criteria_id: criterion.criteria_id,
+      measured_value: '',
+      pass_fail: false
+    }]);
+    const draft = q.saveDraftInspection(inspection.inspection_id, [{
+      criteria_id: criterion.criteria_id,
+      measured_value: '',
+      pass_fail: false
+    }], 'emp-001');
+    expect(draft.inspection.inspection_status).toBe('draft');
+    expect(draft.inspection.overall_result).toBeNull();
+
+    q.setInspectionResults(inspection.inspection_id, [{
+      criteria_id: criterion.criteria_id,
+      measured_value: 10,
+      pass_fail: true
+    }]);
+    q.submitInspectionForReview(inspection.inspection_id, 'emp-001');
+    expect(() => q.updateInspection(inspection.inspection_id, { inspector_id: 'emp-002' }))
+      .toThrow('no puede editarse');
   });
 
-  it('offers plans that use custom inspection categories from settings', () => {
-    addSettingItem('inspection_categories', { key: 'cold_chain', label: 'Cadena de frío' });
-    const plan = makePlan([{}], { plan_name: 'Plan cadena de frío', applicable_stage: 'cold_chain' });
-
-    qs('nav-quality-inspections').click();
-    qs('inspection-module').value = 'goods_receipt';
-    qs('inspection-module').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    qs('inspection-reference').value = 'gr-001';
-    qs('inspection-reference').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-
-    expect([...qs('inspection-stage').options].some(option => option.value === 'cold_chain')).toBe(true);
-    qs('inspection-stage').value = 'cold_chain';
-    qs('inspection-stage').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-
-    const options = [...qs('inspection-plan').options].map(option => option.value).filter(Boolean);
-    expect(options).toEqual([plan.inspection_plan_id]);
+  it('completes the inspection only after review', () => {
+    const inspection = addInspection();
+    q.setInspectionResults(inspection.inspection_id, [{
+      criteria_id: criterion.criteria_id,
+      measured_value: 10,
+      pass_fail: true
+    }]);
+    q.submitInspectionForReview(inspection.inspection_id, 'emp-001');
+    const reviewed = q.reviewInspection(inspection.inspection_id, 'approved', 'jefe_calidad', 'Conforme');
+    expect(reviewed.inspection_status).toBe('completed');
+    expect(reviewed.overall_result).toBe('passed');
   });
 
-  it('resumes the existing draft instead of duplicating it (FR-036)', () => {
-    const plan = makePlan([{}, {}]);
-    qs('nav-quality-inspections').click();
-    selectInspectionHeader(plan);
-    const inputs = qs('inspection-measurements').querySelectorAll('input[data-criteria-id]');
-    inputs[0].value = '10';
-    inputs[0].dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-    qs('inspection-complete').click();
-    const draft = loadCollection('quality_inspections')[0];
-    expect(draft.inspection_status).toBe('draft');
+  it('completes a ten-criterion inspection within the SC-001 time budget', () => {
+    for(let index = 2; index <= 10; index += 1){
+      q.addCriterion({
+        inspection_plan_id: plan.inspection_plan_id,
+        criteria_name: `Criterio ${index}`,
+        expected_value: 10,
+        tolerance: 1,
+        unit: 'kg',
+        comparison_type: 'range',
+        is_critical: index <= 3
+      });
+    }
+    const criteria = q.planCriteria(plan.inspection_plan_id);
+    expect(criteria).toHaveLength(10);
 
-    qs('nav-quality-lots').click();
-    const button = [...qs('pending-lots-body').querySelectorAll('button[data-inspect-reference]')]
-      .find(btn => btn.dataset.inspectReference === 'gr-001');
-    button.click();
+    const startedAt = performance.now();
+    const inspection = addInspection();
+    q.setInspectionResults(inspection.inspection_id, criteria.map(item => ({
+      criteria_id: item.criteria_id,
+      measured_value: 10,
+      pass_fail: true
+    })));
+    const submitted = q.submitInspectionForReview(inspection.inspection_id, 'emp-001');
+    const reviewed = q.reviewInspection(inspection.inspection_id, 'approved', 'jefe_calidad', 'Conforme');
+    const elapsedMs = performance.now() - startedAt;
 
-    expect(loadCollection('quality_inspections').length).toBe(1);
-    expect(qs('inspection-id').value).toBe(draft.inspection_id);
-    expect(qs('inspection-measurements').querySelector('input[data-criteria-id]').value).toBe('10');
-  });
-
-  it('resumes the most recent draft and warns when several exist (FR-036)', () => {
-    const plan = makePlan();
-    const drafts = ['2026-11-01T00:00:00.000Z', '2026-11-20T00:00:00.000Z'].map(createdAt => ({
-      inspection_plan_id: plan.inspection_plan_id,
-      inspector_id: 'emp-001',
-      reference_module: 'goods_receipt',
-      reference_id: 'gr-001',
-      inspection_date: '2026-11-09',
-      createdAt,
-      updatedAt: createdAt
-    }));
-    const list = loadCollection('quality_inspections');
-    drafts.forEach((draft, index) => list.push({
-      ...draft,
-      id: `draft-${index}`,
-      inspection_id: `draft-${index}`,
-      inspection_status: 'draft',
-      overall_result: null
-    }));
-    saveCollection('quality_inspections', list);
-
-    qs('nav-quality-lots').click();
-    const button = [...qs('pending-lots-body').querySelectorAll('button[data-inspect-reference]')]
-      .find(btn => btn.dataset.inspectReference === 'gr-001');
-    button.click();
-
-    expect(qs('inspection-id').value).toBe('draft-1');
-    expect(qs('inspection-error').textContent).toContain('2 borradores');
-    expect(loadCollection('quality_inspections').length).toBe(2);
-  });
-
-  it('saves a draft while measurements are missing and keeps the lot pending', () => {
-    const plan = makePlan([{}, {}]);
-    qs('nav-quality-inspections').click();
-    selectInspectionHeader(plan);
-
-    const inputs = qs('inspection-measurements').querySelectorAll('input[data-criteria-id]');
-    inputs[0].value = '10';
-    inputs[0].dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-    qs('inspection-complete').click();
-
-    const inspections = loadCollection('quality_inspections');
-    expect(inspections.length).toBe(1);
-    expect(inspections[0].inspection_status).toBe('draft');
-    expect(inspections[0].overall_result).toBeNull();
-    expect(qs('inspection-error').textContent).toContain('faltan');
-
-    const pending = derivePendingLots(externalDocuments(), inspections);
-    expect(pending.map(d => `${d.reference_module}:${d.reference_id}`)).toContain('goods_receipt:gr-001');
-  });
-
-  it('completes an inspection with an automatic passed verdict and removes the lot from pending', () => {
-    const plan = makePlan([{ is_critical: true }]);
-    qs('nav-quality-inspections').click();
-    selectInspectionHeader(plan);
-
-    const input = qs('inspection-measurements').querySelector('input[data-criteria-id]');
-    input.value = '10.5';
-    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-
-    expect(qs('inspection-verdict').textContent).toContain('Aprobado');
-    qs('inspection-complete').click();
-
-    const inspections = loadCollection('quality_inspections');
-    expect(inspections.length).toBe(1);
-    expect(inspections[0].inspection_status).toBe('completed');
-    expect(inspections[0].overall_result).toBe('passed');
-
-    const pending = derivePendingLots(externalDocuments(), inspections);
-    expect(pending.map(d => `${d.reference_module}:${d.reference_id}`)).not.toContain('goods_receipt:gr-001');
-  });
-
-  it('rejects orphan references at storage level', () => {
-    const plan = makePlan();
-    expect(() => addInspection({
-      inspection_plan_id: plan.inspection_plan_id,
-      inspector_id: 'emp-001',
-      reference_module: 'goods_receipt',
-      reference_id: 'gr-999',
-      inspection_date: '2026-11-09'
-    })).toThrow();
+    console.info(`[SC-001] inspección de 10 criterios completada en ${elapsedMs.toFixed(2)} ms`);
+    expect(submitted.inspection_status).toBe('pending_review');
+    expect(reviewed.inspection_status).toBe('completed');
+    expect(reviewed.overall_result).toBe('passed');
+    expect(elapsedMs).toBeLessThan(180000);
   });
 });

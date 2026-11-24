@@ -43,6 +43,19 @@ describe('User Story 8 - search and find entities quickly', () => {
     expect(qs('search-empty').hidden).toBe(true);
   });
 
+  it('searches visible columns case-insensitively without matching hidden fields', () => {
+    addEntity({ name: 'Visible Name', code: 'VN-1', taxId: 'HIDDEN-TAX-ID' });
+    qs('nav-search').click();
+    qs('search-input').value = 'hidden-tax-id';
+    qs('search-input').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    expect(qs('search-results-list').querySelectorAll('.entity-item').length).toBe(0);
+    expect(qs('search-empty').hidden).toBe(false);
+    qs('search-input').value = 'visible name';
+    qs('search-input').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    expect(qs('search-results-list').querySelectorAll('.entity-item').length).toBe(1);
+    expect(qs('search-empty').hidden).toBe(true);
+  });
+
   it('shows a clear empty state and allows trying again when nothing matches', () => {
     addEntity({ name: 'Acme', code: 'AC-001' });
     qs('nav-search').click();

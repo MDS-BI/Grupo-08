@@ -1,5 +1,20 @@
 import { getConfig } from './module-config.js';
 import { SEED_KEYS, seedDataSnapshot } from './seed-data.js';
+import { assertCan, ROLES } from './permissions.js';
+import {
+  CAPA_CLOSURE_STATUSES,
+  CHECKLIST_STATUSES,
+  DOCUMENT_STATUSES,
+  INSPECTION_STATUSES,
+  approvalRate as statusApprovalRate,
+  capaEffectiveness as statusCapaEffectiveness,
+  transition
+} from './quality-status.js';
+import { migrateQualityData } from './quality-migrations.js';
+import {
+  evaluateInspection,
+  reviewInspection as reviewInspectionRecord
+} from './inspection-engine.js';
 
 const ENTITIES_KEY = 'erp_base_module:entities';
 const DOCUMENTS_KEY = 'erp_base_module:documents';
@@ -328,7 +343,7 @@ export const CORRECTIVE_ACTION_STATUSES = Object.freeze(['pending', 'in_progress
 export const ACTION_CATEGORIES = Object.freeze(['corrective', 'preventive']);
 export const ACTION_TYPES = Object.freeze(['resampling', 'rework', 'other']);
 export const REFERENCE_MODULES = Object.freeze(['goods_receipt', 'production_order', 'shipment']);
-export const EVIDENCE_ENTITY_TYPES = Object.freeze(['inspection', 'non_conformance', 'corrective_action']);
+export const EVIDENCE_ENTITY_TYPES = Object.freeze(['inspection', 'non_conformance', 'corrective_action', 'document']);
 export const EVIDENCE_MIME_TYPES = Object.freeze(['image/png', 'image/jpeg', 'application/pdf']);
 export const EVIDENCE_MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const EVIDENCE_MAX_TOTAL_BYTES = 8 * 1024 * 1024;
@@ -341,10 +356,10 @@ export const ALERT_METRICS = Object.freeze([
 ]);
 export const ALERT_OPERATORS = Object.freeze(['lt', 'lte', 'gt', 'gte', 'eq']);
 export const ALERT_SEVERITIES = Object.freeze(['info', 'warning', 'critical']);
-export const AUDIT_ENTITIES = Object.freeze(['inspection', 'non_conformance', 'corrective_action']);
-export const AUDIT_ACTIONS = Object.freeze(['create', 'update', 'status_change', 'delete']);
+export const AUDIT_ENTITIES = Object.freeze(['inspection_plan', 'checklist', 'document', 'inspection', 'non_conformance', 'corrective_action']);
+export const AUDIT_ACTIONS = Object.freeze(['create', 'update', 'review', 'approve', 'reject', 'status_change', 'delete']);
 export const QUALITY_DOCUMENT_CATEGORIES = Object.freeze(['manual', 'procedure', 'regulation', 'certificate', 'specification', 'other']);
-export const QUALITY_DOCUMENT_STATUSES = Object.freeze(['under_review', 'approved', 'draft', 'archived']);
+export const QUALITY_DOCUMENT_STATUSES = Object.freeze([...DOCUMENT_STATUSES]);
 export const QUALITY_DOCUMENT_MIME_TYPES = Object.freeze(['image/png', 'image/jpeg', 'application/pdf']);
 export const QUALITY_DOCUMENT_MAX_FILE_BYTES = 10 * 1024 * 1024;
 const QUALITY_SETTINGS_KEY = 'erp_quality:settings';
@@ -391,6 +406,51 @@ const DEFAULT_QUALITY_SETTINGS = Object.freeze({
 });
 const AUDIT_ROLE_KEY = 'erp_quality:viewer_role';
 const ALERT_RATE_METRICS = Object.freeze(['approval_rate', 'capa_effectiveness']);
+
+function normalizedRole(role){
+  return ROLES.includes(role) ? role : 'jefe_calidad';
+}
+
+function dispatchRoleChange(role){
+  if(typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  const detail = { role };
+  let event;
+  if(typeof window.CustomEvent === 'function'){
+    event = new window.CustomEvent('quality:role-changed', { detail });
+  }else if(typeof window.Event === 'function'){
+    event = new window.Event('quality:role-changed');
+    Object.defineProperty(event, 'detail', { value: detail });
+  }else{
+    return;
+  }
+  window.dispatchEvent(event);
+}
+
+function persistRole(role){
+  const next = normalizedRole(role);
+  try{
+    localStorage.setItem(AUDIT_ROLE_KEY, next);
+  }catch(e){
+    console.error('No se pudo guardar el rol activo', e);
+  }
+  dispatchRoleChange(next);
+  return next;
+}
+
+export function getActiveRole(){
+  let role = null;
+  try{
+    role = localStorage.getItem(AUDIT_ROLE_KEY);
+  }catch(e){
+    console.error('No se pudo leer el rol activo', e);
+  }
+  if(ROLES.includes(role)) return role;
+  return persistRole('jefe_calidad');
+}
+
+export function setActiveRole(role){
+  return persistRole(role);
+}
 
 const QUALITY_COLLECTION_KEYS = Object.freeze({
   quality_inspection_plans: 'erp_quality:quality_inspection_plans',
@@ -744,6 +804,7 @@ export function ensureSeedData(){
   if(localStorage.getItem(QUALITY_SETTINGS_KEY) === null){
     saveQualitySettings(DEFAULT_QUALITY_SETTINGS);
   }
+  migrateQualityData();
 }
 
 export function loadCollection(name){
@@ -818,7 +879,9 @@ function isDuplicateAuditEntry(entry, list){
     && existing.action === entry.action
     && existing.changed_field === entry.changed_field
     && existing.timestamp === entry.timestamp
-    && JSON.stringify(existing.after_value) === JSON.stringify(entry.after_value));
+    && JSON.stringify(existing.before_value) === JSON.stringify(entry.before_value)
+    && JSON.stringify(existing.after_value) === JSON.stringify(entry.after_value)
+    && (existing.justification || null) === (entry.justification || null));
 }
 
 export function appendAuditEntry(entry){
@@ -859,19 +922,19 @@ export function clearAuditEntries(){
 
 function auditActor(candidate){
   if(!isBlank(candidate)) return String(candidate).trim();
-  try{
-    const role = localStorage.getItem(AUDIT_ROLE_KEY);
-    if(!isBlank(role)) return String(role).trim();
-  }catch(e){
-    console.error('No se pudo leer el rol de auditoría', e);
-  }
-  return 'sistema';
+  return getActiveRole();
 }
 
 function auditLotReference(entityType, record){
   if(!record) return { reference_module: 'desconocido', reference_id: 'desconocido' };
   if(record.reference_module && record.reference_id){
     return { reference_module: record.reference_module, reference_id: record.reference_id };
+  }
+  if(entityType === 'document' || entityType === 'inspection_plan' || entityType === 'checklist'){
+    return {
+      reference_module: record.reference_module || 'desconocido',
+      reference_id: record.reference_id || record.document_id || record.inspection_plan_id || record.checklist_id || record.id || 'desconocido'
+    };
   }
   if(entityType === 'non_conformance' && record.inspection_id){
     const inspection = loadCollection('quality_inspections').find(i => i.inspection_id === record.inspection_id);
@@ -912,7 +975,10 @@ function recordAudit({ entityType, entityId, record, action, changedField, befor
 
 const AUDIT_IGNORED_FIELDS = Object.freeze([
   'id', 'createdAt', 'updatedAt', 'reference_module', 'reference_id',
-  'completed_at', 'override_justification', 'overridden_by', 'override_at'
+  'completed_at', 'override_justification', 'overridden_by', 'override_at',
+  'closure_status', 'closure_requested_at', 'closure_reviewed_by', 'closure_reviewed_at',
+  'closure_justification', 'effectiveness_result', 'effectiveness_observations',
+  'effectiveness_reviewed_by', 'effectiveness_reviewed_at'
 ]);
 
 function changedFields(previous, next){
@@ -959,13 +1025,16 @@ export function evidenceTotalBytes(records){
 
 function evidenceEntityExists(entityType, entityId){
   if(entityType === 'inspection'){
-    return loadCollection('quality_inspections').some(i => i.inspection_id === entityId);
+    return loadCollection('quality_inspections').some(i => i.inspection_id === entityId || i.id === entityId);
   }
   if(entityType === 'non_conformance'){
-    return loadCollection('non_conformances').some(nc => nc.non_conformance_id === entityId);
+    return loadCollection('non_conformances').some(nc => nc.non_conformance_id === entityId || nc.id === entityId);
   }
   if(entityType === 'corrective_action'){
-    return loadCollection('corrective_actions').some(a => a.corrective_action_id === entityId);
+    return loadCollection('corrective_actions').some(a => a.corrective_action_id === entityId || a.id === entityId);
+  }
+  if(entityType === 'document'){
+    return loadQualityDocuments().some(doc => doc.document_id === entityId || doc.id === entityId);
   }
   return false;
 }
@@ -975,7 +1044,7 @@ export function validateEvidence(payload, options = {}){
   const entityType = payload && payload.entity_type;
   const entityId = payload && payload.entity_id;
   if(!EVIDENCE_ENTITY_TYPES.includes(entityType)){
-    errors.entity_type = 'El tipo de vínculo debe ser inspection, non_conformance o corrective_action';
+    errors.entity_type = 'El tipo de vínculo debe ser inspection, non_conformance, corrective_action o document';
   }
   if(isBlank(entityId)){
     errors.entity_id = 'El registro vinculado es obligatorio';
@@ -1016,6 +1085,7 @@ export function validateEvidence(payload, options = {}){
 }
 
 export function addEvidence(payload){
+  assertCan(getActiveRole(), 'attach_evidence', { entityType: payload && payload.entity_type, entityId: payload && payload.entity_id });
   const check = validateEvidence(payload);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const now = new Date().toISOString();
@@ -1046,10 +1116,15 @@ export function addEvidence(payload){
   return record;
 }
 
-export function deleteEvidence(id){
+export function deleteEvidence(id, actor){
   const list = loadCollection('quality_evidence');
   const record = list.find(item => item.id === id || item.evidence_id === id);
   if(!record) throw new Error('Evidencia no encontrada');
+  assertCan(getActiveRole(), 'delete_evidence', {
+    entityType: record.entity_type,
+    entityId: record.entity_id,
+    isOwner: actor ? record.uploaded_by === actor : undefined
+  });
   saveCollection('quality_evidence', list.filter(item => item.id !== record.id));
   return true;
 }
@@ -1173,6 +1248,40 @@ function compareAlertValue(value, operator, threshold){
   if(operator === 'gte') return value >= threshold;
   if(operator === 'eq') return value === threshold;
   return false;
+}
+
+const REFERENCE_MODULE_STAGES = Object.freeze({
+  goods_receipt: 'incoming',
+  production_order: 'in_process',
+  shipment: 'final'
+});
+
+function inspectionStage(inspection){
+  if(!inspection) return null;
+  return inspection.applicable_stage || inspection.stage || REFERENCE_MODULE_STAGES[inspection.reference_module] || null;
+}
+
+export function approvalRate(inspections, stage){
+  const list = Array.isArray(inspections)
+    ? inspections
+    : loadCollection('quality_inspections');
+  const filtered = isBlank(stage) ? list : list.filter(inspection => inspectionStage(inspection) === stage);
+  return statusApprovalRate(filtered);
+}
+
+export function capaEffectiveness(actions){
+  const list = Array.isArray(actions) ? actions : loadCollection('corrective_actions');
+  return statusCapaEffectiveness(list);
+}
+
+export function pendingInspections(inspections){
+  const list = Array.isArray(inspections) ? inspections : loadCollection('quality_inspections');
+  return list.filter(inspection => ['draft', 'pending_review'].includes(inspection.inspection_status || inspection.status)).length;
+}
+
+export function reviewQueue(inspections){
+  const list = Array.isArray(inspections) ? inspections : loadCollection('quality_inspections');
+  return list.filter(inspection => isQueueableInspection(inspection));
 }
 
 export function deriveAlerts(kpis, alertRules){
@@ -1326,77 +1435,321 @@ export function isPlanEnabled(planId){
   return planHasCriteria(planId);
 }
 
+function fail(code, message){
+  const error = new Error(message);
+  error.code = code;
+  throw error;
+}
+
+function requireJustification(justification){
+  if(isBlank(justification)) fail('MISSING_JUSTIFICATION', 'Registra la justificación para continuar.');
+  return String(justification).trim();
+}
+
+function workflowActor(actor){
+  return isBlank(actor) ? getActiveRole() : String(actor).trim();
+}
+
+function findPlanRecord(id){
+  return loadCollection('quality_inspection_plans').find(plan => plan.id === id || plan.inspection_plan_id === id);
+}
+
+function versionMetadata(id, previous){
+  return {
+    version_group_id: previous ? previous.version_group_id || previous.id : id,
+    version: previous ? (Number(previous.version) || 1) + 1 : 1,
+    version_of: previous ? previous.id : null
+  };
+}
+
 export function addPlan(payload){
+  assertCan(getActiveRole(), 'manage_plan', { status: 'draft', isDraft: true });
   const check = validateInspectionPlan(payload);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const now = new Date().toISOString();
+  const id = generateId();
   const plan = {
-    id: generateId(),
+    id,
     inspection_plan_id: generateId(),
+    ...versionMetadata(id),
     product_id: payload.product_id,
     plan_name: String(payload.plan_name).trim(),
     applicable_stage: payload.applicable_stage,
+    status: 'draft',
+    submitted_by: null,
+    submitted_at: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    review_justification: null,
     is_locked: false,
+    created_by: isBlank(payload.created_by) ? null : String(payload.created_by).trim(),
     createdAt: now,
     updatedAt: now
   };
   const list = loadCollection('quality_inspection_plans');
   list.push(plan);
   saveCollection('quality_inspection_plans', list);
+  recordAudit({
+    entityType: 'inspection_plan',
+    entityId: plan.inspection_plan_id,
+    record: plan,
+    action: 'create',
+    changedField: 'status',
+    beforeValue: null,
+    afterValue: { status: plan.status, version: plan.version },
+    actor: plan.created_by
+  });
   return plan;
 }
 
-export function updatePlan(id, updates){
+export function updatePlan(id, updates, actor){
   const list = loadCollection('quality_inspection_plans');
   const idx = list.findIndex(p => p.id === id || p.inspection_plan_id === id);
   if(idx === -1) throw new Error('Plan no encontrado');
-  if(list[idx].is_locked || planHasInspections(list[idx].inspection_plan_id)){
-    throw new Error('El plan tiene inspecciones históricas y no puede editarse; duplícalo para crear una nueva versión');
+  const previous = list[idx];
+  const hasHistory = Boolean(previous.is_locked) || planHasInspections(previous.inspection_plan_id);
+  assertCan(getActiveRole(), 'manage_plan', { status: previous.status, hasHistory, isLocked: previous.is_locked });
+  if(previous.status === 'approved' || hasHistory){
+    fail('INVALID_STATE', 'El plan tiene inspecciones históricas o está aprobado y no puede editarse; duplícalo para crear una nueva versión');
   }
-  const merged = { ...list[idx], ...updates };
+  if(previous.status === 'pending_approval'){
+    fail('INVALID_STATE', 'El plan está pendiente de aprobación y no puede editarse');
+  }
+  const merged = { ...previous, ...updates };
   const check = validateInspectionPlan(merged);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
-  list[idx] = {
-    ...list[idx],
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
     product_id: merged.product_id,
     plan_name: String(merged.plan_name).trim(),
     applicable_stage: merged.applicable_stage,
-    updatedAt: new Date().toISOString()
+    status: previous.status === 'rejected' ? 'draft' : previous.status,
+    updatedAt: now
   };
+  list[idx] = next;
   saveCollection('quality_inspection_plans', list);
-  return list[idx];
+  const statusChanged = next.status !== previous.status;
+  recordAudit({
+    entityType: 'inspection_plan',
+    entityId: previous.inspection_plan_id,
+    record: next,
+    action: statusChanged ? 'status_change' : 'update',
+    changedField: statusChanged ? 'status' : 'plan_name',
+    beforeValue: statusChanged ? previous.status : previous.plan_name,
+    afterValue: statusChanged ? next.status : next.plan_name,
+    actor: actor || undefined,
+    justification: statusChanged ? previous.review_justification : undefined
+  });
+  return next;
 }
 
-export function deletePlan(id){
+export function submitPlanForApproval(id, actor){
+  const list = loadCollection('quality_inspection_plans');
+  const idx = list.findIndex(plan => plan.id === id || plan.inspection_plan_id === id);
+  if(idx === -1) throw new Error('Plan no encontrado');
+  const previous = list[idx];
+  const criteriaCount = planCriteria(previous.inspection_plan_id).length;
+  assertCan(getActiveRole(), 'submit_plan', { status: previous.status, criteriaCount });
+  if(!['draft', 'rejected'].includes(previous.status)){
+    fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  }
+  if(!criteriaCount) fail('INVALID_STATE', 'El plan necesita al menos un criterio para enviarse a aprobación');
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    status: 'pending_approval',
+    submitted_by: workflowActor(actor),
+    submitted_at: now,
+    reviewed_by: null,
+    reviewed_at: null,
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('quality_inspection_plans', list);
+  recordAudit({
+    entityType: 'inspection_plan',
+    entityId: previous.inspection_plan_id,
+    record: next,
+    action: 'status_change',
+    changedField: 'status',
+    beforeValue: previous.status,
+    afterValue: next.status,
+    actor: next.submitted_by
+  });
+  return next;
+}
+
+export function approvePlan(id, reviewer, justification){
+  const list = loadCollection('quality_inspection_plans');
+  const idx = list.findIndex(plan => plan.id === id || plan.inspection_plan_id === id);
+  if(idx === -1) throw new Error('Plan no encontrado');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'approve_plan', { status: previous.status });
+  const status = transition('plan', 'approve', previous.status, { requiresJustification: false });
+  if(!status) fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  const now = new Date().toISOString();
+  const reviewedBy = workflowActor(reviewer);
+  const next = {
+    ...previous,
+    status,
+    reviewed_by: reviewedBy,
+    reviewed_at: now,
+    review_justification: isBlank(justification) ? previous.review_justification : String(justification).trim(),
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('quality_inspection_plans', list);
+  recordAudit({
+    entityType: 'inspection_plan',
+    entityId: previous.inspection_plan_id,
+    record: next,
+    action: 'approve',
+    changedField: 'status',
+    beforeValue: previous.status,
+    afterValue: {
+      status: next.status,
+      reviewed_by: next.reviewed_by,
+      reviewed_at: next.reviewed_at,
+      review_justification: next.review_justification
+    },
+    actor: next.reviewed_by,
+    justification
+  });
+  return next;
+}
+
+export function rejectPlan(id, reviewer, justification){
+  const list = loadCollection('quality_inspection_plans');
+  const idx = list.findIndex(plan => plan.id === id || plan.inspection_plan_id === id);
+  if(idx === -1) throw new Error('Plan no encontrado');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'reject_plan', { status: previous.status });
+  const reason = requireJustification(justification);
+  const status = transition('plan', 'reject', previous.status, { requiresJustification: true, justification: reason });
+  if(!status) fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    status,
+    reviewed_by: workflowActor(reviewer),
+    reviewed_at: now,
+    review_justification: reason,
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('quality_inspection_plans', list);
+  recordAudit({
+    entityType: 'inspection_plan',
+    entityId: previous.inspection_plan_id,
+    record: next,
+    action: 'reject',
+    changedField: 'status',
+    beforeValue: previous.status,
+    afterValue: {
+      status: next.status,
+      reviewed_by: next.reviewed_by,
+      reviewed_at: next.reviewed_at,
+      review_justification: next.review_justification
+    },
+    actor: next.reviewed_by,
+    justification: reason
+  });
+  return next;
+}
+
+export function duplicatePlanVersion(id, actor){
+  const source = findPlanRecord(id);
+  if(!source) throw new Error('Plan no encontrado');
+  const hasHistory = Boolean(source.is_locked) || planHasInspections(source.inspection_plan_id);
+  assertCan(getActiveRole(), 'version_plan', { status: source.status, hasHistory });
+  if(source.status !== 'approved') fail('INVALID_STATE', 'Solo se puede versionar un plan aprobado.');
+  const now = new Date().toISOString();
+  const newId = generateId();
+  const copy = {
+    ...source,
+    id: newId,
+    inspection_plan_id: generateId(),
+    ...versionMetadata(newId, source),
+    status: 'draft',
+    submitted_by: null,
+    submitted_at: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    review_justification: null,
+    is_locked: false,
+    created_by: workflowActor(actor),
+    createdAt: now,
+    updatedAt: now
+  };
+  const list = loadCollection('quality_inspection_plans');
+  list.push(copy);
+  saveCollection('quality_inspection_plans', list);
+  planCriteria(source.inspection_plan_id).forEach(criterion => {
+    addCriterion({
+      inspection_plan_id: copy.inspection_plan_id,
+      criteria_name: criterion.criteria_name,
+      expected_value: criterion.expected_value,
+      tolerance: criterion.tolerance,
+      unit: criterion.unit,
+      comparison_type: criterion.comparison_type,
+      is_critical: criterion.is_critical
+    });
+  });
+  recordAudit({
+    entityType: 'inspection_plan',
+    entityId: copy.inspection_plan_id,
+    record: copy,
+    action: 'create',
+    changedField: 'status',
+    beforeValue: null,
+    afterValue: { status: copy.status, version: copy.version, version_group_id: copy.version_group_id, version_of: copy.version_of },
+    actor: copy.created_by
+  });
+  return copy;
+}
+
+export function deletePlan(id, actor){
   const plans = loadCollection('quality_inspection_plans');
   const plan = plans.find(p => p.id === id || p.inspection_plan_id === id);
   if(!plan) throw new Error('Plan no encontrado');
-  if(plan.is_locked || planHasInspections(plan.inspection_plan_id)){
-    throw new Error('El plan tiene inspecciones históricas y no puede eliminarse');
+  const hasHistory = Boolean(plan.is_locked) || planHasInspections(plan.inspection_plan_id);
+  assertCan(getActiveRole(), 'delete_plan', { status: plan.status, hasHistory });
+  if(hasHistory || plan.status === 'approved'){
+    throw new Error('El plan tiene inspecciones históricas o está aprobado y no puede eliminarse');
   }
   saveCollection('quality_inspection_plans', plans.filter(p => p.id !== plan.id));
   deleteRelated('quality_inspection_criteria', 'inspection_plan_id', plan.inspection_plan_id);
+  recordAudit({
+    entityType: 'inspection_plan',
+    entityId: plan.inspection_plan_id,
+    record: plan,
+    action: 'delete',
+    changedField: 'status',
+    beforeValue: plan.status,
+    afterValue: null,
+    actor: actor || undefined
+  });
   return true;
 }
 
 export function duplicatePlan(id){
-  const plans = loadCollection('quality_inspection_plans');
-  const source = plans.find(p => p.id === id || p.inspection_plan_id === id);
+  const source = findPlanRecord(id);
   if(!source) throw new Error('Plan no encontrado');
   const copy = addPlan({
     product_id: source.product_id,
     plan_name: `${source.plan_name} (copia)`,
     applicable_stage: source.applicable_stage
   });
-  planCriteria(source.inspection_plan_id).forEach(c => {
+  planCriteria(source.inspection_plan_id).forEach(criterion => {
     addCriterion({
       inspection_plan_id: copy.inspection_plan_id,
-      criteria_name: c.criteria_name,
-      expected_value: c.expected_value,
-      tolerance: c.tolerance,
-      unit: c.unit,
-      comparison_type: c.comparison_type,
-      is_critical: c.is_critical
+      criteria_name: criterion.criteria_name,
+      expected_value: criterion.expected_value,
+      tolerance: criterion.tolerance,
+      unit: criterion.unit,
+      comparison_type: criterion.comparison_type,
+      is_critical: criterion.is_critical
     });
   });
   return copy;
@@ -1484,14 +1837,50 @@ export function deleteCriterion(id){
   return true;
 }
 
+function findChecklistRecord(id){
+  if(isBlank(id)) return null;
+  return loadCollection('quality_checklists').find(item => item.id === id || item.checklist_id === id) || null;
+}
+
+function inspectionResults(inspectionId){
+  return loadCollection('quality_inspection_results').filter(result => result.inspection_id === inspectionId);
+}
+
+function criteriaForInspection(inspection){
+  const plan = findPlanRecord(inspection && inspection.inspection_plan_id);
+  const checklist = findChecklistRecord(inspection && inspection.checklist_id);
+  return [
+    ...(plan ? planCriteria(plan.inspection_plan_id) : []),
+    ...(checklist && Array.isArray(checklist.criteria) ? checklist.criteria : [])
+  ];
+}
+
+function isQueueableInspection(inspection){
+  if(!inspection) return false;
+  const status = inspection.inspection_status || inspection.status;
+  const proposed = inspection.proposed_result === undefined ? inspection.proposedResult : inspection.proposed_result;
+  const result = inspection.overall_result === undefined ? inspection.overallResult : inspection.overall_result;
+  const decision = inspection.review_decision === undefined ? inspection.reviewDecision : inspection.review_decision;
+  if(status === 'pending_review') return true;
+  return status === 'completed' && decision === null
+    && (proposed === 'conditional' || (proposed === undefined && result === 'conditional'));
+}
+
 export function validateInspection(payload){
   const errors = {};
-  const plans = loadCollection('quality_inspection_plans');
-  const plan = plans.find(p => p.inspection_plan_id === payload.inspection_plan_id);
+  const plan = findPlanRecord(payload && payload.inspection_plan_id);
   if(!plan){
     errors.inspection_plan_id = 'Selecciona un plan de inspección válido';
+  } else if(plan.status !== 'approved'){
+    errors.inspection_plan_id = 'Solo se pueden usar planes aprobados.';
   } else if(!planHasCriteria(plan.inspection_plan_id)){
     errors.inspection_plan_id = 'El plan necesita al menos un criterio para habilitarse';
+  }
+  const checklist = findChecklistRecord(payload && payload.checklist_id);
+  if(!isBlank(payload && payload.checklist_id) && !checklist){
+    errors.checklist_id = 'Selecciona una lista de verificación válida';
+  } else if(checklist && checklist.status !== 'approved'){
+    errors.checklist_id = 'Solo se pueden usar listas aprobadas.';
   }
   if(isBlank(payload.inspector_id)){
     errors.inspector_id = 'El inspector es obligatorio';
@@ -1501,25 +1890,43 @@ export function validateInspection(payload){
   Object.assign(errors, validateReference(payload.reference_module, payload.reference_id).errors);
   if(isBlank(payload.inspection_date)) errors.inspection_date = 'La fecha de inspección es obligatoria';
   else if(!isValidDate(payload.inspection_date)) errors.inspection_date = 'La fecha de inspección no es válida (YYYY-MM-DD)';
-  return { valid: Object.keys(errors).length === 0, errors, plan };
+  return { valid: Object.keys(errors).length === 0, errors, plan, checklist };
 }
 
 export function addInspection(payload){
   const check = validateInspection(payload);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
+  assertCan(getActiveRole(), 'execute_inspection', {
+    status: 'draft',
+    planStatus: check.plan && check.plan.status,
+    checklistStatus: check.checklist ? check.checklist.status : undefined
+  });
   const now = new Date().toISOString();
-  const allowedStatuses = qualityCatalogKeys('inspection_statuses');
-  const status = allowedStatuses.includes(payload.inspection_status) ? payload.inspection_status : 'draft';
+  const legacy = payload.inspection_status === 'completed' || payload.status === 'completed';
+  const status = legacy && INSPECTION_STATUSES.includes('completed') ? 'completed' : 'draft';
+  const proposedResult = legacy
+    ? (payload.proposed_result || payload.overall_result || null)
+    : null;
   const inspection = {
     id: generateId(),
     inspection_id: generateId(),
     inspection_plan_id: payload.inspection_plan_id,
+    checklist_id: isBlank(payload.checklist_id) ? null : payload.checklist_id,
+    checklist_version: check.checklist ? check.checklist.version || 1 : null,
     inspector_id: payload.inspector_id,
     reference_module: payload.reference_module,
     reference_id: payload.reference_id,
     inspection_date: payload.inspection_date,
     inspection_status: status,
-    overall_result: status === 'completed' ? (payload.overall_result || null) : null,
+    proposed_result: proposedResult,
+    overall_result: legacy ? (payload.overall_result || null) : null,
+    review_decision: payload.review_decision || null,
+    review_justification: payload.review_justification || null,
+    reviewed_by: payload.reviewed_by || null,
+    reviewed_at: payload.reviewed_at || null,
+    submitted_by: payload.submitted_by || null,
+    submitted_at: payload.submitted_at || null,
+    legacy_completed: legacy && !payload.review_decision,
     override_justification: payload.override_justification || undefined,
     overridden_by: payload.overridden_by || undefined,
     override_at: payload.override_at || undefined,
@@ -1536,7 +1943,7 @@ export function addInspection(payload){
     action: 'create',
     changedField: 'inspection_status',
     beforeValue: null,
-    afterValue: inspection.inspection_status,
+    afterValue: { inspection_status: inspection.inspection_status },
     actor: inspection.inspector_id
   });
   return inspection;
@@ -1547,33 +1954,29 @@ export function updateInspection(id, updates, options = {}){
   const idx = list.findIndex(i => i.id === id || i.inspection_id === id);
   if(idx === -1) throw new Error('Inspección no encontrada');
   const previous = list[idx];
+  const plan = findPlanRecord(previous.inspection_plan_id);
+  const checklist = findChecklistRecord(previous.checklist_id);
+  assertCan(getActiveRole(), 'execute_inspection', {
+    status: previous.inspection_status,
+    planStatus: plan && plan.status,
+    checklistStatus: checklist ? checklist.status : undefined
+  });
+  if(previous.inspection_status === 'pending_review' && !options.allowPending){
+    fail('INVALID_STATE', 'La inspección está pendiente de revisión y no puede editarse');
+  }
   list[idx] = { ...previous, ...updates, id: previous.id, updatedAt: new Date().toISOString() };
   saveCollection('quality_inspections', list);
-  if(options.audit !== false){
+  if(options.audit !== false && options.auditMode !== 'override'){
     const actor = options.actor || updates.overridden_by || updates.inspector_id || previous.inspector_id;
-    if(options.auditMode === 'override'){
-      recordAudit({
-        entityType: 'inspection',
-        entityId: previous.inspection_id,
-        record: previous,
-        action: 'status_change',
-        changedField: 'overall_result',
-        beforeValue: previous.overall_result,
-        afterValue: list[idx].overall_result,
-        actor,
-        justification: options.justification
-      });
-    }else{
-      recordUpdateAudit({
-        entityType: 'inspection',
-        entityId: previous.inspection_id,
-        previous,
-        next: list[idx],
-        actor,
-        justification: options.justification,
-        statusField: 'inspection_status'
-      });
-    }
+    recordUpdateAudit({
+      entityType: 'inspection',
+      entityId: previous.inspection_id,
+      previous,
+      next: list[idx],
+      actor,
+      justification: options.justification,
+      statusField: 'inspection_status'
+    });
   }
   return list[idx];
 }
@@ -1583,6 +1986,7 @@ export function deleteInspection(id){
   const inspection = list.find(i => i.id === id || i.inspection_id === id);
   if(!inspection) throw new Error('Inspección no encontrada');
   const hasNc = loadCollection('non_conformances').some(nc => nc.inspection_id === inspection.inspection_id);
+  assertCan(getActiveRole(), 'delete_records', { status: inspection.inspection_status, isDraft: inspection.inspection_status === 'draft', hasHistory: hasNc });
   if(hasNc) throw new Error('La inspección tiene una no conformidad asociada y no puede eliminarse');
   saveCollection('quality_inspections', list.filter(i => i.id !== inspection.id));
   deleteRelated('quality_inspection_results', 'inspection_id', inspection.inspection_id);
@@ -1620,22 +2024,211 @@ export function setInspectionResults(inspectionId, results){
   return next.filter(r => r.inspection_id === inspectionId);
 }
 
-export function completeInspection(id, overallResult, results){
-  const saved = setInspectionResults(id, results);
-  const inspection = updateInspection(id, {
+export function completeInspection(id, overallResult, results, actor){
+  setInspectionResults(id, results || []);
+  const now = new Date().toISOString();
+  const list = loadCollection('quality_inspections');
+  const idx = list.findIndex(item => item.id === id || item.inspection_id === id);
+  if(idx === -1) throw new Error('Inspección no encontrada');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'execute_inspection', { status: previous.inspection_status });
+  const proposedResult = ['passed', 'conditional', 'failed'].includes(overallResult) ? overallResult : null;
+  const next = {
+    ...previous,
     inspection_status: 'completed',
-    overall_result: overallResult
+    proposed_result: proposedResult,
+    overall_result: overallResult,
+    review_decision: previous.review_decision || null,
+    legacy_completed: !previous.review_decision,
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('quality_inspections', list);
+  recordAudit({
+    entityType: 'inspection',
+    entityId: previous.inspection_id,
+    record: next,
+    action: 'status_change',
+    changedField: 'inspection_status',
+    beforeValue: previous.inspection_status,
+    afterValue: 'completed',
+    actor: actor || previous.inspector_id
   });
   if(overallResult === 'failed' && qualityParameter('auto_create_nc_on_failure')){
-    createNonConformanceFromInspection(inspection.inspection_id);
+    createNonConformanceFromInspection(next.inspection_id);
   }
-  return { inspection, results: saved };
+  return { inspection: next, results: inspectionResults(next.inspection_id) };
 }
 
-export function saveDraftInspection(id, results){
-  const saved = setInspectionResults(id, results);
-  const inspection = updateInspection(id, { inspection_status: 'draft', overall_result: null });
-  return { inspection, results: saved };
+export function saveDraftInspection(id, results, actor){
+  const saved = setInspectionResults(id, results || []);
+  const list = loadCollection('quality_inspections');
+  const idx = list.findIndex(item => item.id === id || item.inspection_id === id);
+  if(idx === -1) throw new Error('Inspección no encontrada');
+  const previous = list[idx];
+  const plan = findPlanRecord(previous.inspection_plan_id);
+  const checklist = findChecklistRecord(previous.checklist_id);
+  assertCan(getActiveRole(), 'execute_inspection', {
+    status: previous.inspection_status,
+    planStatus: plan && plan.status,
+    checklistStatus: checklist ? checklist.status : undefined
+  });
+  if(previous.inspection_status === 'pending_review'){
+    fail('INVALID_STATE', 'La inspección está pendiente de revisión y no puede editarse');
+  }
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    inspection_status: 'draft',
+    proposed_result: null,
+    overall_result: null,
+    review_decision: null,
+    review_justification: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    submitted_by: null,
+    submitted_at: null,
+    legacy_completed: false,
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('quality_inspections', list);
+  if(previous.inspection_status !== 'draft'){
+    recordAudit({
+      entityType: 'inspection',
+      entityId: previous.inspection_id,
+      record: next,
+      action: 'status_change',
+      changedField: 'inspection_status',
+      beforeValue: previous.inspection_status,
+      afterValue: 'draft',
+      actor: actor || previous.inspector_id
+    });
+  }
+  return { inspection: next, results: saved };
+}
+
+export function submitInspectionForReview(id, actor){
+  const list = loadCollection('quality_inspections');
+  const idx = list.findIndex(item => item.id === id || item.inspection_id === id);
+  if(idx === -1) throw new Error('Inspección no encontrada');
+  const previous = list[idx];
+  const plan = findPlanRecord(previous.inspection_plan_id);
+  const checklist = findChecklistRecord(previous.checklist_id);
+  assertCan(getActiveRole(), 'submit_inspection', {
+    status: previous.inspection_status,
+    planStatus: plan && plan.status,
+    checklistStatus: checklist ? checklist.status : undefined
+  });
+  if(!['draft'].includes(previous.inspection_status)){
+    fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  }
+  if(!plan || plan.status !== 'approved'){
+    fail('NON_APPROVED_PLAN', 'Solo se pueden usar planes aprobados.');
+  }
+  if(checklist && checklist.status !== 'approved'){
+    fail('NON_APPROVED_CHECKLIST', 'Solo se pueden usar listas aprobadas.');
+  }
+  const criteria = criteriaForInspection(previous);
+  if(!criteria.length) fail('INVALID_STATE', 'El plan de inspección no tiene criterios');
+  const evaluation = evaluateInspection({ criteria }, inspectionResults(previous.inspection_id));
+  if(evaluation.status !== 'complete'){
+    fail('INVALID_STATE', 'Faltan mediciones para enviar la inspección a revisión');
+  }
+  setInspectionResults(previous.inspection_id, evaluation.results.map((result, index) => ({
+    criteria_id: criteria[index] && criteria[index].criteria_id !== undefined ? criteria[index].criteria_id : result.criteria_id,
+    measured_value: result.measured_value,
+    pass_fail: result.pass_fail
+  })));
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    inspection_status: 'pending_review',
+    proposed_result: evaluation.overall_result,
+    overall_result: null,
+    review_decision: null,
+    review_justification: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    submitted_by: workflowActor(actor),
+    submitted_at: now,
+    legacy_completed: false,
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('quality_inspections', list);
+  recordAudit({
+    entityType: 'inspection',
+    entityId: previous.inspection_id,
+    record: next,
+    action: 'status_change',
+    changedField: 'inspection_status',
+    beforeValue: previous.inspection_status,
+    afterValue: next.inspection_status,
+    actor: next.submitted_by
+  });
+  return next;
+}
+
+function parseInspectionReviewArguments(third, fourth){
+  if(ROLES.includes(third)) return { actor: third, justification: fourth };
+  if(ROLES.includes(fourth)) return { actor: fourth, justification: third };
+  if(!isBlank(third) && loadExternal('employees').some(employee => employee.employee_id === third)){
+    return { actor: third, justification: fourth };
+  }
+  return { actor: fourth || getActiveRole(), justification: third };
+}
+
+export function reviewInspection(id, decision, third, fourth){
+  const args = parseInspectionReviewArguments(third, fourth);
+  const list = loadCollection('quality_inspections');
+  const idx = list.findIndex(item => item.id === id || item.inspection_id === id);
+  if(idx === -1) throw new Error('Inspección no encontrada');
+  const previous = list[idx];
+  const eligible = isQueueableInspection(previous);
+  assertCan(getActiveRole(), 'review_inspection', {
+    inspectionStatus: previous.inspection_status,
+    proposedResult: previous.proposed_result,
+    reviewDecision: previous.review_decision,
+    isLegacy: eligible && previous.inspection_status === 'completed'
+  });
+  if(!eligible) fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  const reviewed = reviewInspectionRecord(previous, decision, args.justification, args.actor || getActiveRole(), {
+    criteria: criteriaForInspection(previous),
+    results: inspectionResults(previous.inspection_id),
+    now: new Date().toISOString()
+  });
+  const next = {
+    ...previous,
+    inspection_status: reviewed.inspection_status,
+    proposed_result: reviewed.proposed_result,
+    overall_result: reviewed.overall_result,
+    review_decision: reviewed.review_decision,
+    reviewed_by: reviewed.reviewed_by,
+    reviewed_at: reviewed.reviewed_at,
+    review_justification: reviewed.review_justification,
+    legacy_completed: previous.inspection_status === 'completed',
+    updatedAt: reviewed.reviewed_at
+  };
+  list[idx] = next;
+  saveCollection('quality_inspections', list);
+  const audit = reviewed.audit || {};
+  recordAudit({
+    entityType: 'inspection',
+    entityId: previous.inspection_id,
+    record: next,
+    action: audit.action,
+    changedField: 'overall_result',
+    beforeValue: audit.before_value,
+    afterValue: audit.after_value,
+    actor: audit.actor,
+    justification: args.justification,
+    timestamp: audit.timestamp
+  });
+  if(reviewed.createNonConformance){
+    createNonConformanceFromInspection(next.inspection_id);
+  }
+  return next;
 }
 
 export function validateNonConformance(nc){
@@ -1649,6 +2242,7 @@ export function validateNonConformance(nc){
 }
 
 export function addNonConformance(payload){
+  assertCan(getActiveRole(), 'create_non_conformance', { inspectionId: payload && payload.inspection_id });
   const check = validateNonConformance(payload);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const now = new Date().toISOString();
@@ -1694,6 +2288,8 @@ export function updateNonConformance(id, updates){
   const idx = list.findIndex(nc => nc.id === id || nc.non_conformance_id === id);
   if(idx === -1) throw new Error('No conformidad no encontrada');
   const previous = list[idx];
+  const closing = updates.status === 'closed' && previous.status !== 'closed';
+  assertCan(getActiveRole(), closing ? 'close_non_conformance' : 'edit_non_conformance', { status: previous.status });
   const merged = { ...previous, ...updates };
   const check = validateNonConformance(merged);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
@@ -1727,6 +2323,7 @@ export function deleteNonConformance(id){
   const list = loadCollection('non_conformances');
   const nc = list.find(n => n.id === id || n.non_conformance_id === id);
   if(!nc) throw new Error('No conformidad no encontrada');
+  assertCan(getActiveRole(), 'delete_non_conformance', { status: nc.status });
   const cascadedActions = loadCollection('corrective_actions')
     .filter(a => a.non_conformance_id === nc.non_conformance_id);
   const inspection = nc.inspection_id
@@ -1820,6 +2417,7 @@ export function validateCorrectiveAction(action){
 }
 
 export function addCorrectiveAction(payload){
+  assertCan(getActiveRole(), 'propose_capa', { nonConformanceId: payload && payload.non_conformance_id });
   const check = validateCorrectiveAction(payload);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const now = new Date().toISOString();
@@ -1842,6 +2440,15 @@ export function addCorrectiveAction(payload){
     progress: normalizeActionProgress(payload.progress, payload.status),
     status: payload.status,
     completed_at: payload.status === 'completed' ? now : undefined,
+    closure_status: payload.status === 'completed' ? 'pending' : (payload.closure_status || null),
+    closure_requested_at: payload.status === 'completed' ? now : null,
+    closure_reviewed_by: null,
+    closure_reviewed_at: null,
+    closure_justification: null,
+    effectiveness_result: null,
+    effectiveness_observations: null,
+    effectiveness_reviewed_by: null,
+    effectiveness_reviewed_at: null,
     createdAt: now,
     updatedAt: now
   };
@@ -1866,11 +2473,17 @@ export function updateCorrectiveAction(id, updates){
   const idx = list.findIndex(a => a.id === id || a.corrective_action_id === id);
   if(idx === -1) throw new Error('Acción CAPA no encontrada');
   const previous = list[idx];
+  const completing = updates.status === 'completed' && previous.status !== 'completed';
+  const starting = previous.status === 'pending' && updates.status === 'in_progress';
+  assertCan(getActiveRole(), starting || completing ? 'complete_capa' : 'edit_capa', {
+    status: previous.status,
+    closureStatus: previous.closure_status
+  });
+  if(previous.closure_status === 'approved') fail('INVALID_STATE', 'La CAPA tiene el cierre aprobado y no puede editarse');
   const merged = { ...previous, ...updates };
   const check = validateCorrectiveAction(merged);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const now = new Date().toISOString();
-  const completing = merged.status === 'completed' && previous.status !== 'completed';
   list[idx] = {
     ...previous,
     responsible_employee_id: merged.responsible_employee_id,
@@ -1889,6 +2502,8 @@ export function updateCorrectiveAction(id, updates){
         : normalizeActionProgress(previous.progress, merged.status)),
     status: merged.status,
     completed_at: completing ? now : previous.completed_at,
+    closure_status: completing ? 'pending' : (previous.closure_status || null),
+    closure_requested_at: completing ? now : previous.closure_requested_at || null,
     updatedAt: now
   };
   saveCollection('corrective_actions', list);
@@ -1907,6 +2522,7 @@ export function deleteCorrectiveAction(id){
   const list = loadCollection('corrective_actions');
   const action = list.find(a => a.id === id || a.corrective_action_id === id);
   if(!action) throw new Error('Acción CAPA no encontrada');
+  assertCan(getActiveRole(), 'delete_records', { status: action.status, closureStatus: action.closure_status });
   const next = list.filter(a => a.id !== action.id);
   saveCollection('corrective_actions', next);
   deleteEvidenceFor('corrective_action', action.corrective_action_id);
@@ -1925,8 +2541,169 @@ export function deleteCorrectiveAction(id){
 
 export function isCapaOverdue(action, today){
   if(!action || !action.due_date) return false;
+  if(action.closure_status === 'approved') return false;
   const ref = today || new Date().toISOString().slice(0, 10);
-  return action.due_date < ref && action.status !== 'completed';
+  return action.due_date < ref && action.closure_status !== 'approved';
+}
+
+export function requestCapaClosure(id, actor){
+  assertCan(getActiveRole(), 'request_capa_closure', {});
+  const list = loadCollection('corrective_actions');
+  const idx = list.findIndex(action => action.id === id || action.corrective_action_id === id);
+  if(idx === -1) throw new Error('Acción CAPA no encontrada');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'request_capa_closure', { status: previous.status, closureStatus: previous.closure_status });
+  if(previous.status !== 'completed') fail('INVALID_STATE', 'Solo se puede solicitar el cierre de una CAPA completada.');
+  const status = transition('capaClosure', 'request', previous.status, { requiresJustification: false });
+  if(!status) fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    closure_status: 'pending',
+    closure_requested_at: now,
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('corrective_actions', list);
+  recordAudit({
+    entityType: 'corrective_action',
+    entityId: previous.corrective_action_id,
+    record: next,
+    action: 'status_change',
+    changedField: 'closure_status',
+    beforeValue: previous.closure_status,
+    afterValue: { closure_status: next.closure_status, closure_requested_at: next.closure_requested_at },
+    actor: actor || previous.responsible_employee_id
+  });
+  return next;
+}
+
+export function registerCapaEffectiveness(id, result, observations, actor){
+  assertCan(getActiveRole(), 'register_effectiveness', {});
+  const list = loadCollection('corrective_actions');
+  const idx = list.findIndex(action => action.id === id || action.corrective_action_id === id);
+  if(idx === -1) throw new Error('Acción CAPA no encontrada');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'register_effectiveness', { status: previous.status, closureStatus: previous.closure_status });
+  if(!CAPA_CLOSURE_STATUSES.includes(previous.closure_status) || previous.closure_status !== 'pending'){
+    fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  }
+  if(!['effective', 'not_effective'].includes(result)) fail('INVALID_STATE', 'La eficacia debe ser effective o not_effective');
+  const note = requireJustification(observations);
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    effectiveness_result: result,
+    effectiveness_observations: note,
+    effectiveness_reviewed_by: workflowActor(actor),
+    effectiveness_reviewed_at: now,
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('corrective_actions', list);
+  recordAudit({
+    entityType: 'corrective_action',
+    entityId: previous.corrective_action_id,
+    record: next,
+    action: 'review',
+    changedField: 'effectiveness_result',
+    beforeValue: previous.effectiveness_result,
+    afterValue: {
+      effectiveness_result: next.effectiveness_result,
+      effectiveness_observations: next.effectiveness_observations,
+      effectiveness_reviewed_by: next.effectiveness_reviewed_by,
+      effectiveness_reviewed_at: next.effectiveness_reviewed_at
+    },
+    actor: next.effectiveness_reviewed_by
+  });
+  return next;
+}
+
+export function reviewCapaClosure(id, decision, effectiveness, observations, actor, justification){
+  assertCan(getActiveRole(), 'review_capa_closure', {});
+  const list = loadCollection('corrective_actions');
+  const idx = list.findIndex(action => action.id === id || action.corrective_action_id === id);
+  if(idx === -1) throw new Error('Acción CAPA no encontrada');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'review_capa_closure', { status: previous.status, closureStatus: previous.closure_status });
+  if(previous.closure_status !== 'pending') fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  if(!['approved', 'rejected'].includes(decision)) fail('INVALID_STATE', 'La decisión de cierre no es válida.');
+  let current = previous;
+  if(!isBlank(effectiveness)){
+    assertCan(getActiveRole(), 'register_effectiveness', { status: previous.status, closureStatus: previous.closure_status });
+    if(!['effective', 'not_effective'].includes(effectiveness)) fail('INVALID_STATE', 'La eficacia debe ser effective o not_effective');
+    if(isBlank(observations)) fail('MISSING_JUSTIFICATION', 'Registra la justificación para continuar.');
+    const now = new Date().toISOString();
+    current = {
+      ...current,
+      effectiveness_result: effectiveness,
+      effectiveness_observations: String(observations).trim(),
+      effectiveness_reviewed_by: workflowActor(actor),
+      effectiveness_reviewed_at: now,
+      updatedAt: now
+    };
+    list[idx] = current;
+    saveCollection('corrective_actions', list);
+    recordAudit({
+      entityType: 'corrective_action',
+      entityId: previous.corrective_action_id,
+      record: current,
+      action: 'review',
+      changedField: 'effectiveness_result',
+      beforeValue: previous.effectiveness_result,
+      afterValue: {
+        effectiveness_result: current.effectiveness_result,
+        effectiveness_observations: current.effectiveness_observations,
+        effectiveness_reviewed_by: current.effectiveness_reviewed_by,
+        effectiveness_reviewed_at: current.effectiveness_reviewed_at
+      },
+      actor: current.effectiveness_reviewed_by
+    });
+  }
+  let justificationText = justification;
+  if(decision === 'rejected') justificationText = requireJustification(justificationText);
+  const hasEffectiveness = Boolean(current.effectiveness_result && !isBlank(current.effectiveness_observations));
+  const transitionAction = decision === 'approved' ? 'approve' : 'reject';
+  const status = transition('capaClosure', transitionAction, current.closure_status, {
+    requiresJustification: decision === 'rejected',
+    justification: justificationText,
+    hasEffectiveness
+  });
+  if(!status){
+    if(!hasEffectiveness) fail('MISSING_EVIDENCE_EFFECTIVENESS', 'Registra la eficacia antes de aprobar el cierre.');
+    fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  }
+  const now = new Date().toISOString();
+  const next = {
+    ...current,
+    closure_status: status,
+    status: decision === 'rejected' ? 'in_progress' : current.status,
+    closure_reviewed_by: workflowActor(actor),
+    closure_reviewed_at: now,
+    closure_justification: isBlank(justificationText) ? null : String(justificationText).trim(),
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('corrective_actions', list);
+  recordAudit({
+    entityType: 'corrective_action',
+    entityId: previous.corrective_action_id,
+    record: next,
+    action: decision === 'approved' ? 'approve' : 'reject',
+    changedField: 'closure_status',
+    beforeValue: current.closure_status,
+    afterValue: {
+      closure_status: next.closure_status,
+      status: next.status,
+      closure_reviewed_by: next.closure_reviewed_by,
+      closure_reviewed_at: next.closure_reviewed_at,
+      closure_justification: next.closure_justification,
+      effectiveness_result: next.effectiveness_result
+    },
+    actor: next.closure_reviewed_by,
+    justification: justificationText
+  });
+  return next;
 }
 
 export function canOverrideInspection(inspectionId, targetResult){
@@ -1934,41 +2711,70 @@ export function canOverrideInspection(inspectionId, targetResult){
   if(!['passed', 'failed', 'conditional'].includes(targetResult)){
     errors.overall_result = 'El dictamen debe ser passed, failed o conditional';
   }
-  const inspection = loadCollection('quality_inspections').find(i => i.inspection_id === inspectionId);
+  const inspection = loadCollection('quality_inspections').find(i => i.id === inspectionId || i.inspection_id === inspectionId);
   if(!inspection){
     errors.inspection_id = 'La inspección no existe';
     return { valid: false, errors };
   }
-  const plan = loadCollection('quality_inspection_plans').find(p => p.inspection_plan_id === inspection.inspection_plan_id);
-  const criteria = plan ? planCriteria(plan.inspection_plan_id) : [];
-  const results = loadCollection('quality_inspection_results').filter(r => r.inspection_id === inspectionId);
-  if(targetResult === 'passed'){
-    const critical = criteria.filter(c => c.is_critical);
-    for(const c of critical){
-      const result = results.find(r => r.criteria_id === c.criteria_id);
-      if(!result) errors.overall_result = 'No se puede aprobar: hay criterios críticos sin medición';
-      else if(result.pass_fail === false) errors.overall_result = 'No se puede aprobar: hay criterios críticos fallidos';
-      if(errors.overall_result) break;
-    }
+  if(inspection.inspection_status !== 'completed'){
+    errors.inspection_id = 'Solo se puede modificar una inspección completada';
+    return { valid: false, errors };
+  }
+  const criteria = criteriaForInspection(inspection);
+  const results = inspectionResults(inspection.inspection_id);
+  const byCriteria = new Map(results.map(result => [result.criteria_id, result]));
+  const missing = criteria.some(criterion => {
+    const result = byCriteria.get(criterion.criteria_id);
+    return !result || !Number.isFinite(Number(result.measured_value));
+  });
+  const criticalFailed = criteria.some(criterion => {
+    const result = byCriteria.get(criterion.criteria_id);
+    return criterion.is_critical && result && result.pass_fail === false;
+  });
+  if(targetResult === 'passed' && (missing || criticalFailed)){
+    errors.overall_result = 'No se puede aprobar: hay criterios críticos fallidos o mediciones faltantes';
   }
   return { valid: Object.keys(errors).length === 0, errors };
 }
 
 export function overrideInspection(inspectionId, targetResult, justification, overriddenBy){
-  if(isBlank(justification)) throw new Error('La justificación es obligatoria');
+  assertCan(getActiveRole(), 'override_inspection', { status: 'completed' });
+  const reason = isBlank(justification) ? '' : String(justification).trim();
+  if(!reason) fail('MISSING_JUSTIFICATION', 'La justificación es obligatoria');
   if(isBlank(overriddenBy)) throw new Error('El usuario que autoriza es obligatorio');
   const check = canOverrideInspection(inspectionId, targetResult);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
-  return updateInspection(inspectionId, {
+  const list = loadCollection('quality_inspections');
+  const idx = list.findIndex(item => item.id === inspectionId || item.inspection_id === inspectionId);
+  const previous = list[idx];
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
     overall_result: targetResult,
-    override_justification: String(justification).trim(),
+    override_justification: reason,
     overridden_by: String(overriddenBy).trim(),
-    override_at: new Date().toISOString()
-  }, {
-    auditMode: 'override',
-    justification,
-    actor: overriddenBy
+    override_at: now,
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('quality_inspections', list);
+  recordAudit({
+    entityType: 'inspection',
+    entityId: previous.inspection_id,
+    record: next,
+    action: 'status_change',
+    changedField: 'overall_result',
+    beforeValue: previous.overall_result,
+    afterValue: {
+      overall_result: targetResult,
+      overridden_by: next.overridden_by,
+      override_at: next.override_at,
+      override_justification: next.override_justification
+    },
+    actor: next.overridden_by,
+    justification: reason
   });
+  return next;
 }
 
 export function loadChecklists(){
@@ -1997,17 +2803,39 @@ function normalizeChecklistCriteria(criteria){
   }));
 }
 
+function normalizeChecklistStatus(status){
+  if(status === 'active' || status === 'approved') return 'approved';
+  if(status === 'under_review') return 'pending_review';
+  return CHECKLIST_STATUSES.includes(status) ? status : 'draft';
+}
+
+function checklistHasHistory(checklist){
+  if(!checklist) return false;
+  if(checklist.is_locked || (checklist.evaluations && checklist.evaluations.length)) return true;
+  return loadCollection('quality_inspections').some(item => item.checklist_id === checklist.checklist_id);
+}
+
 export function addChecklist(payload){
+  assertCan(getActiveRole(), 'manage_checklist', { status: 'draft', isDraft: true });
   const check = validateChecklist(payload);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const now = new Date().toISOString();
+  const id = generateId();
   const checklist = {
-    id: generateId(),
+    id,
     checklist_id: generateId(),
+    ...versionMetadata(id),
     name: String(payload.name).trim(),
     description: String(payload.description || '').trim(),
     category: String(payload.category).trim(),
-    status: payload.status === 'draft' || payload.status === 'archived' ? payload.status : 'active',
+    status: normalizeChecklistStatus(payload.status),
+    submitted_by: null,
+    submitted_at: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    review_justification: null,
+    is_locked: false,
+    created_by: isBlank(payload.created_by) ? null : String(payload.created_by).trim(),
     createdAt: now,
     updatedAt: now,
     criteria: normalizeChecklistCriteria(payload.criteria),
@@ -2016,35 +2844,234 @@ export function addChecklist(payload){
   const list = loadCollection('quality_checklists');
   list.push(checklist);
   saveCollection('quality_checklists', list);
+  recordAudit({
+    entityType: 'checklist',
+    entityId: checklist.checklist_id,
+    record: checklist,
+    action: 'create',
+    changedField: 'status',
+    beforeValue: null,
+    afterValue: { status: checklist.status, version: checklist.version },
+    actor: checklist.created_by
+  });
   return checklist;
 }
 
-export function updateChecklist(id, updates){
+export function updateChecklist(id, updates, actor){
   const list = loadCollection('quality_checklists');
   const idx = list.findIndex(item => item.id === id || item.checklist_id === id);
   if(idx === -1) throw new Error('Lista de verificación no encontrada');
   const previous = list[idx];
+  const hasHistory = checklistHasHistory(previous);
+  assertCan(getActiveRole(), 'manage_checklist', { status: previous.status, hasHistory, isLocked: previous.is_locked });
+  if(previous.status === 'approved' && hasHistory){
+    fail('INVALID_STATE', 'La lista tiene historial y no puede editarse; crea una nueva versión');
+  }
+  if(previous.status === 'pending_approval'){
+    fail('INVALID_STATE', 'La lista está pendiente de aprobación y no puede editarse');
+  }
   const merged = { ...previous, ...updates };
   const check = validateChecklist(merged);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
-  list[idx] = {
+  const next = {
     ...previous,
     name: String(merged.name).trim(),
     description: String(merged.description || '').trim(),
     category: String(merged.category).trim(),
-    status: merged.status === 'draft' || merged.status === 'archived' ? merged.status : 'active',
+    status: previous.status === 'rejected' ? 'draft' : normalizeChecklistStatus(merged.status),
     criteria: normalizeChecklistCriteria(merged.criteria),
     updatedAt: new Date().toISOString()
   };
+  list[idx] = next;
   saveCollection('quality_checklists', list);
-  return list[idx];
+  const statusChanged = next.status !== previous.status;
+  recordAudit({
+    entityType: 'checklist',
+    entityId: previous.checklist_id,
+    record: next,
+    action: statusChanged ? 'status_change' : 'update',
+    changedField: statusChanged ? 'status' : 'name',
+    beforeValue: statusChanged ? previous.status : previous.name,
+    afterValue: statusChanged ? next.status : next.name,
+    actor: actor || undefined,
+    justification: statusChanged ? previous.review_justification : undefined
+  });
+  return next;
 }
 
-export function deleteChecklist(id){
+export function submitChecklistForApproval(id, actor){
   const list = loadCollection('quality_checklists');
-  const next = list.filter(item => item.id !== id && item.checklist_id !== id);
-  if(next.length === list.length) throw new Error('Lista de verificación no encontrada');
-  saveCollection('quality_checklists', next);
+  const idx = list.findIndex(item => item.id === id || item.checklist_id === id);
+  if(idx === -1) throw new Error('Lista de verificación no encontrada');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'submit_checklist', { status: previous.status, criteriaCount: (previous.criteria || []).length });
+  const status = transition('checklist', 'submit', previous.status, { requiresJustification: false });
+  if(!status) fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  if(!(previous.criteria || []).length) fail('INVALID_STATE', 'La lista necesita al menos un criterio');
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    status,
+    submitted_by: workflowActor(actor),
+    submitted_at: now,
+    reviewed_by: null,
+    reviewed_at: null,
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('quality_checklists', list);
+  recordAudit({
+    entityType: 'checklist',
+    entityId: previous.checklist_id,
+    record: next,
+    action: 'status_change',
+    changedField: 'status',
+    beforeValue: previous.status,
+    afterValue: next.status,
+    actor: next.submitted_by
+  });
+  return next;
+}
+
+export function approveChecklist(id, reviewer, justification){
+  const list = loadCollection('quality_checklists');
+  const idx = list.findIndex(item => item.id === id || item.checklist_id === id);
+  if(idx === -1) throw new Error('Lista de verificación no encontrada');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'approve_checklist', { status: previous.status, criteriaCount: (previous.criteria || []).length });
+  const status = transition('checklist', 'approve', previous.status, { requiresJustification: false });
+  if(!status) fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  if(!(previous.criteria || []).length) fail('INVALID_STATE', 'No se puede aprobar una lista sin criterios');
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    status,
+    reviewed_by: workflowActor(reviewer),
+    reviewed_at: now,
+    review_justification: isBlank(justification) ? previous.review_justification : String(justification).trim(),
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('quality_checklists', list);
+  recordAudit({
+    entityType: 'checklist',
+    entityId: previous.checklist_id,
+    record: next,
+    action: 'approve',
+    changedField: 'status',
+    beforeValue: previous.status,
+    afterValue: {
+      status: next.status,
+      reviewed_by: next.reviewed_by,
+      reviewed_at: next.reviewed_at,
+      review_justification: next.review_justification
+    },
+    actor: next.reviewed_by,
+    justification
+  });
+  return next;
+}
+
+export function rejectChecklist(id, reviewer, justification){
+  const list = loadCollection('quality_checklists');
+  const idx = list.findIndex(item => item.id === id || item.checklist_id === id);
+  if(idx === -1) throw new Error('Lista de verificación no encontrada');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'reject_checklist', { status: previous.status });
+  const reason = requireJustification(justification);
+  const status = transition('checklist', 'reject', previous.status, { requiresJustification: true, justification: reason });
+  if(!status) fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    status,
+    reviewed_by: workflowActor(reviewer),
+    reviewed_at: now,
+    review_justification: reason,
+    updatedAt: now
+  };
+  list[idx] = next;
+  saveCollection('quality_checklists', list);
+  recordAudit({
+    entityType: 'checklist',
+    entityId: previous.checklist_id,
+    record: next,
+    action: 'reject',
+    changedField: 'status',
+    beforeValue: previous.status,
+    afterValue: {
+      status: next.status,
+      reviewed_by: next.reviewed_by,
+      reviewed_at: next.reviewed_at,
+      review_justification: next.review_justification
+    },
+    actor: next.reviewed_by,
+    justification: reason
+  });
+  return next;
+}
+
+export function duplicateChecklistVersion(id, actor){
+  const source = findChecklistRecord(id);
+  if(!source) throw new Error('Lista de verificación no encontrada');
+  assertCan(getActiveRole(), 'version_checklist', { status: source.status, hasHistory: checklistHasHistory(source) });
+  if(normalizeChecklistStatus(source.status) !== 'approved') fail('INVALID_STATE', 'Solo se puede versionar una lista aprobada.');
+  const now = new Date().toISOString();
+  const newId = generateId();
+  const copy = {
+    ...source,
+    id: newId,
+    checklist_id: generateId(),
+    ...versionMetadata(newId, source),
+    status: 'draft',
+    submitted_by: null,
+    submitted_at: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    review_justification: null,
+    is_locked: false,
+    created_by: workflowActor(actor),
+    createdAt: now,
+    updatedAt: now,
+    criteria: normalizeChecklistCriteria(source.criteria || []),
+    evaluations: []
+  };
+  const list = loadCollection('quality_checklists');
+  list.push(copy);
+  saveCollection('quality_checklists', list);
+  recordAudit({
+    entityType: 'checklist',
+    entityId: copy.checklist_id,
+    record: copy,
+    action: 'create',
+    changedField: 'status',
+    beforeValue: null,
+    afterValue: { status: copy.status, version: copy.version, version_group_id: copy.version_group_id },
+    actor: copy.created_by
+  });
+  return copy;
+}
+
+export function deleteChecklist(id, actor){
+  const list = loadCollection('quality_checklists');
+  const checklist = list.find(item => item.id === id || item.checklist_id === id);
+  if(!checklist) throw new Error('Lista de verificación no encontrada');
+  const hasHistory = checklistHasHistory(checklist);
+  assertCan(getActiveRole(), 'delete_checklist', { status: checklist.status, hasHistory });
+  if(hasHistory || checklist.status === 'approved'){
+    fail('INVALID_STATE', 'La lista tiene historial o está aprobada y no puede eliminarse');
+  }
+  saveCollection('quality_checklists', list.filter(item => item.id !== checklist.id));
+  recordAudit({
+    entityType: 'checklist',
+    entityId: checklist.checklist_id,
+    record: checklist,
+    action: 'delete',
+    changedField: 'status',
+    beforeValue: checklist.status,
+    afterValue: null,
+    actor: actor || undefined
+  });
   return true;
 }
 
@@ -2116,42 +3143,83 @@ function nextQualityDocumentId(list){
   return `DOC-${String(max + 1).padStart(3, '0')}`;
 }
 
+function findQualityDocumentRecord(id){
+  return loadQualityDocuments().find(doc => doc.id === id || doc.document_id === id);
+}
+
+function normalizeQualityDocumentStatus(status){
+  if(status === 'active' || status === 'approved') return 'approved';
+  if(status === 'under_review') return 'pending_review';
+  return DOCUMENT_STATUSES.includes(status) ? status : 'draft';
+}
+
+function documentHasPreview(doc){
+  return Boolean(doc && doc.file_name && QUALITY_DOCUMENT_MIME_TYPES.includes(doc.mime_type)
+    && typeof doc.data_url === 'string' && doc.data_url.includes(';base64,'));
+}
+
 export function addQualityDocument(payload){
-  const check = validateQualityDocument(payload);
+  assertCan(getActiveRole(), 'create_document', { status: 'draft', documentStatus: 'draft' });
+  const normalized = { ...payload, status: normalizeQualityDocumentStatus(payload && payload.status) };
+  const check = validateQualityDocument(normalized);
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const list = loadQualityDocuments();
   const now = new Date().toISOString();
+  const id = generateId();
+  const documentId = nextQualityDocumentId(list);
   const doc = {
-    id: generateId(),
-    document_id: nextQualityDocumentId(list),
-    name: String(payload.name).trim(),
-    category: payload.category,
-    description: String(payload.description || '').trim(),
-    file_name: String(payload.file_name).trim(),
-    mime_type: payload.mime_type,
-    size_bytes: Number(payload.size_bytes),
-    data_url: payload.data_url,
-    responsible_employee_id: payload.responsible_employee_id,
-    status: payload.status,
+    id,
+    document_id: documentId,
+    version_group_id: `doc-${documentId}`,
+    version: 1,
+    version_of: null,
+    name: String(normalized.name).trim(),
+    category: normalized.category,
+    description: String(normalized.description || '').trim(),
+    file_name: String(normalized.file_name).trim(),
+    mime_type: normalized.mime_type,
+    size_bytes: Number(normalized.size_bytes),
+    data_url: normalized.data_url,
+    responsible_employee_id: normalized.responsible_employee_id,
+    status: normalized.status,
+    submitted_by: null,
+    submitted_at: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    review_justification: null,
+    created_by: isBlank(normalized.created_by) ? null : String(normalized.created_by).trim(),
     uploaded_at: now,
-    updated_at: now,
-    version: 1
+    updated_at: now
   };
   list.push(doc);
   saveCollection('quality_documents', list);
+  recordAudit({
+    entityType: 'document',
+    entityId: doc.document_id,
+    record: doc,
+    action: 'create',
+    changedField: 'status',
+    beforeValue: null,
+    afterValue: { status: doc.status, version: doc.version },
+    actor: doc.created_by || doc.responsible_employee_id
+  });
   return doc;
 }
 
-export function updateQualityDocument(id, updates){
+export function updateQualityDocument(id, updates, actor){
   const list = loadQualityDocuments();
   const idx = list.findIndex(doc => doc.id === id || doc.document_id === id);
   if(idx === -1) throw new Error('Documento no encontrado');
   const previous = list[idx];
-  const merged = { ...previous, ...updates };
+  if(['approved', 'archived'].includes(previous.status)){
+    fail('INVALID_STATE', 'El documento aprobado no se edita; crea una nueva versión');
+  }
+  assertCan(getActiveRole(), 'edit_document', { documentStatus: previous.status, status: previous.status });
+  const merged = { ...previous, ...updates, status: normalizeQualityDocumentStatus(updates.status !== undefined ? updates.status : previous.status) };
   const check = validateQualityDocument(merged, { requireFile: false });
   if(!check.valid) throw new Error(Object.values(check.errors)[0]);
   const now = new Date().toISOString();
-  list[idx] = {
+  const next = {
     ...previous,
     name: String(merged.name).trim(),
     category: merged.category,
@@ -2161,19 +3229,198 @@ export function updateQualityDocument(id, updates){
     size_bytes: Number(merged.size_bytes || previous.size_bytes),
     data_url: merged.data_url || previous.data_url,
     responsible_employee_id: merged.responsible_employee_id,
-    status: merged.status,
+    status: previous.status === 'rejected' ? 'draft' : merged.status,
+    review_justification: previous.status === 'rejected' ? previous.review_justification : (merged.review_justification || previous.review_justification || null),
     updated_at: now,
-    version: (Number(previous.version) || 1) + 1
+    version: Number(previous.version) || 1
   };
+  list[idx] = next;
   saveCollection('quality_documents', list);
-  return list[idx];
+  const statusChanged = next.status !== previous.status;
+  recordAudit({
+    entityType: 'document',
+    entityId: previous.document_id,
+    record: next,
+    action: statusChanged ? 'status_change' : 'update',
+    changedField: statusChanged ? 'status' : 'name',
+    beforeValue: statusChanged ? previous.status : previous.name,
+    afterValue: statusChanged ? next.status : next.name,
+    actor: actor || undefined,
+    justification: statusChanged ? previous.review_justification : undefined
+  });
+  return next;
 }
 
-export function deleteQualityDocument(id){
+export function submitDocumentForReview(id, actor){
+  const list = loadQualityDocuments();
+  const idx = list.findIndex(doc => doc.id === id || doc.document_id === id);
+  if(idx === -1) throw new Error('Documento no encontrado');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'submit_document', { documentStatus: previous.status, status: previous.status });
+  const status = transition('document', 'submit', previous.status, { requiresJustification: false });
+  if(!status) fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  if(!documentHasPreview(previous)) fail('INVALID_STATE', 'El documento necesita un archivo previsualizable');
+  const check = validateQualityDocument(previous);
+  if(!check.valid) throw new Error(Object.values(check.errors)[0]);
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    status,
+    submitted_by: workflowActor(actor),
+    submitted_at: now,
+    reviewed_by: null,
+    reviewed_at: null,
+    updated_at: now
+  };
+  list[idx] = next;
+  saveCollection('quality_documents', list);
+  recordAudit({
+    entityType: 'document',
+    entityId: previous.document_id,
+    record: next,
+    action: 'status_change',
+    changedField: 'status',
+    beforeValue: previous.status,
+    afterValue: next.status,
+    actor: next.submitted_by
+  });
+  return next;
+}
+
+export function approveDocument(id, reviewer, justification){
+  const list = loadQualityDocuments();
+  const idx = list.findIndex(doc => doc.id === id || doc.document_id === id);
+  if(idx === -1) throw new Error('Documento no encontrado');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'approve_document', { documentStatus: previous.status, status: previous.status });
+  const status = transition('document', 'approve', previous.status, { requiresJustification: false });
+  if(!status) fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  if(!documentHasPreview(previous)) fail('INVALID_STATE', 'El documento necesita un archivo previsualizable');
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    status,
+    reviewed_by: workflowActor(reviewer),
+    reviewed_at: now,
+    review_justification: isBlank(justification) ? previous.review_justification : String(justification).trim(),
+    updated_at: now
+  };
+  list[idx] = next;
+  saveCollection('quality_documents', list);
+  recordAudit({
+    entityType: 'document',
+    entityId: previous.document_id,
+    record: next,
+    action: 'approve',
+    changedField: 'status',
+    beforeValue: previous.status,
+    afterValue: {
+      status: next.status,
+      reviewed_by: next.reviewed_by,
+      reviewed_at: next.reviewed_at,
+      review_justification: next.review_justification
+    },
+    actor: next.reviewed_by,
+    justification
+  });
+  return next;
+}
+
+export function rejectDocument(id, reviewer, justification){
+  const list = loadQualityDocuments();
+  const idx = list.findIndex(doc => doc.id === id || doc.document_id === id);
+  if(idx === -1) throw new Error('Documento no encontrado');
+  const previous = list[idx];
+  assertCan(getActiveRole(), 'reject_document', { documentStatus: previous.status, status: previous.status });
+  const reason = requireJustification(justification);
+  const status = transition('document', 'reject', previous.status, { requiresJustification: true, justification: reason });
+  if(!status) fail('INVALID_STATE', 'La acción no está disponible en el estado actual.');
+  const now = new Date().toISOString();
+  const next = {
+    ...previous,
+    status,
+    reviewed_by: workflowActor(reviewer),
+    reviewed_at: now,
+    review_justification: reason,
+    updated_at: now
+  };
+  list[idx] = next;
+  saveCollection('quality_documents', list);
+  recordAudit({
+    entityType: 'document',
+    entityId: previous.document_id,
+    record: next,
+    action: 'reject',
+    changedField: 'status',
+    beforeValue: previous.status,
+    afterValue: {
+      status: next.status,
+      reviewed_by: next.reviewed_by,
+      reviewed_at: next.reviewed_at,
+      review_justification: next.review_justification
+    },
+    actor: next.reviewed_by,
+    justification: reason
+  });
+  return next;
+}
+
+export function duplicateDocumentVersion(id, actor){
+  const source = findQualityDocumentRecord(id);
+  if(!source) throw new Error('Documento no encontrado');
+  assertCan(getActiveRole(), 'version_document', { documentStatus: source.status, status: source.status });
+  if(source.status !== 'approved') fail('INVALID_STATE', 'Solo se puede versionar un documento aprobado.');
+  const now = new Date().toISOString();
+  const copy = {
+    ...source,
+    id: generateId(),
+    version: (Number(source.version) || 1) + 1,
+    version_group_id: source.version_group_id || `doc-${source.document_id}`,
+    version_of: source.id,
+    status: 'draft',
+    submitted_by: null,
+    submitted_at: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    review_justification: null,
+    created_by: workflowActor(actor),
+    uploaded_at: now,
+    updated_at: now
+  };
+  const list = loadQualityDocuments();
+  list.push(copy);
+  saveCollection('quality_documents', list);
+  recordAudit({
+    entityType: 'document',
+    entityId: copy.document_id,
+    record: copy,
+    action: 'create',
+    changedField: 'status',
+    beforeValue: null,
+    afterValue: { status: copy.status, version: copy.version, version_of: copy.version_of },
+    actor: copy.created_by
+  });
+  return copy;
+}
+
+export function deleteQualityDocument(id, actor){
   const list = loadQualityDocuments();
   const doc = list.find(item => item.id === id || item.document_id === id);
   if(!doc) throw new Error('Documento no encontrado');
+  assertCan(getActiveRole(), 'delete_document', { documentStatus: doc.status, status: doc.status });
+  if(doc.status === 'approved') fail('INVALID_STATE', 'El documento aprobado no se elimina; crea una nueva versión');
   saveCollection('quality_documents', list.filter(item => item.id !== doc.id));
+  deleteEvidenceFor('document', doc.document_id);
+  recordAudit({
+    entityType: 'document',
+    entityId: doc.document_id,
+    record: doc,
+    action: 'delete',
+    changedField: 'status',
+    beforeValue: doc.status,
+    afterValue: null,
+    actor: actor || undefined
+  });
   return true;
 }
 

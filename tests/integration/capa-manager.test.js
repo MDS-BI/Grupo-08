@@ -4,7 +4,11 @@ import {
   addPlan,
   addCriterion,
   addInspection,
-  completeInspection,
+  submitPlanForApproval,
+  approvePlan,
+  setInspectionResults,
+  submitInspectionForReview,
+  reviewInspection,
   addCorrectiveAction,
   evidenceFor,
   loadCollection,
@@ -26,6 +30,8 @@ function createFailedInspection(){
     comparison_type: 'range',
     is_critical: true
   });
+  submitPlanForApproval(plan.inspection_plan_id, 'emp-001');
+  approvePlan(plan.inspection_plan_id, 'jefe_calidad');
   const inspection = addInspection({
     inspection_plan_id: plan.inspection_plan_id,
     inspector_id: 'emp-001',
@@ -33,12 +39,13 @@ function createFailedInspection(){
     reference_id: reference,
     inspection_date: '2026-11-20'
   });
-  completeInspection(inspection.inspection_id, 'failed', [{
+  setInspectionResults(inspection.inspection_id, [{
     criteria_id: criterion.criteria_id,
     measured_value: 99,
     pass_fail: false
   }]);
-  return inspection;
+  submitInspectionForReview(inspection.inspection_id, 'emp-001');
+  return reviewInspection(inspection.inspection_id, 'rejected', 'jefe_calidad', 'Rechazo por peso fuera de rango');
 }
 
 beforeEach(async () => {
@@ -65,7 +72,7 @@ describe('Dedicated corrective and preventive actions workspace', () => {
       status: 'pending'
     });
 
-    qs('nav-quality-capa').click();
+    qs('quality-capa').click();
 
     expect(qs('capa-view-heading').textContent).toBe('Acciones Correctivas y Preventivas');
     expect(document.querySelector('#view-corrective-actions').hidden).toBe(false);
@@ -91,7 +98,7 @@ describe('Dedicated corrective and preventive actions workspace', () => {
   it('registers a preventive action with expected result, evidence and tracking detail', async () => {
     createFailedInspection();
     const nc = loadCollection('non_conformances')[0];
-    qs('nav-quality-capa').click();
+    qs('quality-capa').click();
     qs('capm-create').click();
     expect(qs('capm-form-card').hidden).toBe(false);
 
@@ -137,15 +144,15 @@ describe('Dedicated corrective and preventive actions workspace', () => {
       action_type: 'other',
       start_date: '2026-11-20',
       due_date: '2026-12-15',
-      status: 'pending'
+      status: 'in_progress'
     });
 
-    qs('nav-quality-capa').click();
-    qs('capm-status-filter').value = 'in_progress';
+    qs('quality-capa').click();
+    qs('capm-status-filter').value = 'pending';
     qs('capm-status-filter').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
     expect(qs('capm-empty').hidden).toBe(false);
 
-    qs('capm-status-filter').value = 'pending';
+    qs('capm-status-filter').value = 'in_progress';
     qs('capm-status-filter').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
     expect(qs('capm-list').textContent).toContain('Capacitar al inspector');
     qs('capm-list').querySelector('button[data-capm-detail]').click();

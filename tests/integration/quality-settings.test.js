@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   addCriterion,
+  addChecklist,
   addInspection,
   addPlan,
+  approvePlan,
+  submitPlanForApproval,
+  addAlertRule,
   clearQualityData,
   completeInspection,
+  getActiveRole,
   loadCollection,
   loadExternal,
   loadQualitySettings,
@@ -122,6 +127,14 @@ describe('Quality configuration workspace', () => {
       comparison_type: 'range',
       is_critical: true
     });
+    submitPlanForApproval(plan.inspection_plan_id);
+    approvePlan(plan.inspection_plan_id);
+    const checklist = addChecklist({
+      name: 'Checklist parametrizado',
+      category: 'general',
+      status: 'approved',
+      criteria: [{ name: 'Revisión' }]
+    });
     updateQualityParameters({
       approval_target: 90,
       auto_create_nc_on_failure: false,
@@ -132,6 +145,7 @@ describe('Quality configuration workspace', () => {
 
     const failedInspection = addInspection({
       inspection_plan_id: plan.inspection_plan_id,
+      checklist_id: checklist.checklist_id,
       inspector_id: 'emp-001',
       reference_module: 'goods_receipt',
       reference_id: referenceId,
@@ -147,6 +161,7 @@ describe('Quality configuration workspace', () => {
     updateQualityParameters({ auto_create_nc_on_failure: true });
     const secondInspection = addInspection({
       inspection_plan_id: plan.inspection_plan_id,
+      checklist_id: checklist.checklist_id,
       inspector_id: 'emp-001',
       reference_module: 'goods_receipt',
       reference_id: referenceId,
@@ -163,5 +178,27 @@ describe('Quality configuration workspace', () => {
     expect(generated[0].severity).toBe('critical');
     expect(generated[0].status).toBe('under_review');
     expect(loadQualitySettings().parameters.default_inspection_stage).toBe('final');
+  });
+
+  it('changes the active role without duplicating session controls', () => {
+    qs('quality-settings-role').value = 'inspector';
+    qs('quality-settings-role').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    expect(getActiveRole()).toBe('inspector');
+    expect(qs('quality-active-role').textContent).toContain('Inspector');
+    expect(document.querySelectorAll('#quality-role').length).toBe(1);
+  });
+
+  it('deactivates and deletes configured alert rules', () => {
+    addAlertRule({ metric: 'approval_rate', operator: 'lt', threshold: 80, severity: 'warning' });
+    qs('nav-quality-settings').click();
+    expect(qs('qset-alert-rule-list').textContent).toContain('Tasa de aprobación');
+
+    qs('qset-alert-rule-list').querySelector('[data-qset-alert-toggle]').click();
+    expect(loadCollection('quality_alert_rules')[0].is_active).toBe(false);
+    expect(qs('qset-alert-rule-list').textContent).toContain('Inactiva');
+
+    qs('qset-alert-rule-list').querySelector('[data-qset-alert-delete]').click();
+    expect(loadCollection('quality_alert_rules').length).toBe(0);
+    expect(qs('qset-alert-rule-list').textContent).toContain('No hay reglas de alerta configuradas');
   });
 });

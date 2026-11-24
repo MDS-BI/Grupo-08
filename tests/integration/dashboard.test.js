@@ -95,6 +95,7 @@ describe('User Story 3 - home dashboard with quick actions and record stats', ()
     qs('nav-dashboard').click();
 
     qs('action-new-entity').click();
+    qs('nav-entities').click();
     expect(qs('view-entities').hidden).toBe(false);
     expect(qs('view-dashboard').hidden).toBe(true);
     expect(qs('entity-id').value).toBe('');
@@ -113,6 +114,7 @@ describe('User Story 3 - home dashboard with quick actions and record stats', ()
   it('opens the search screen with a focused search field via the find action', async () => {
     await bootWith(undefined);
     qs('action-find').click();
+    qs('nav-search').click();
     expect(qs('view-search').hidden).toBe(false);
     expect(document.activeElement).toBe(qs('search-input'));
   });

@@ -1,3 +1,4 @@
+import * as storage from '../storage.js';
 import {
   loadCollection,
   loadExternal,
@@ -31,6 +32,10 @@ import {
   emptyState
 } from './quality-utils.js';
 import { addEvidenceFromFile, downloadEvidence, renderEvidenceList } from './evidence.js';
+import { can, assertCan, applyPermissionState } from '../permissions.js';
+import { CAPA_CLOSURE_STATUSES, EFFECTIVENESS_RESULTS, isReviewableInspection } from '../quality-status.js';
+import { renderStatusBadge, statusLabel } from './status-badge.js';
+import { renderPermissionNotice } from './permission-notice.js';
 
 const NC_ERROR_FIELDS = {
   description: 'error-nc-description',
@@ -84,7 +89,82 @@ const AUDIT_ACTION_LABELS = {
   delete: 'Eliminación'
 };
 
+const CLOSURE_META = {
+  pending: { label: 'Pendiente', className: 'status-pending badge-pending' },
+  approved: { label: 'Aprobado', className: 'status-approved badge-approved' },
+  rejected: { label: 'Rechazado', className: 'status-rejected badge-rejected' }
+};
+
+const EFFECTIVENESS_LABELS = {
+  effective: 'Eficaz',
+  not_effective: 'No eficaz'
+};
+
 let currentDetailId = '';
+
+function activeRole(){
+  const getter = storage.getActiveRole;
+  if(typeof getter === 'function'){
+    try{ return getter(); }catch{ return 'jefe_calidad'; }
+  }
+  return 'jefe_calidad';
+}
+
+function invoke(name, ...args){
+  const fn = storage[name];
+  if(typeof fn !== 'function') throw new Error(`La operación ${name} no está disponible en este momento.`);
+  return fn(...args);
+}
+
+function capaContext(action){
+  return {
+    status: action && action.status,
+    closureStatus: action && action.closure_status
+  };
+}
+
+function workflowButton(label, dataset, permission, disabled){
+  const button = actionButton(label, 'secondary', dataset);
+  if(disabled){
+    button.disabled = true;
+    button.dataset.stateDisabled = 'true';
+  }else{
+    button.dataset.permission = permission;
+  }
+  return button;
+}
+
+function applyStateDisables(root){
+  if(!root || typeof root.querySelectorAll !== 'function') return;
+  root.querySelectorAll('[data-state-disabled]').forEach(button => { button.disabled = true; });
+}
+
+function applyNcPermissions(root){
+  const scope = root || document;
+  applyPermissionState(scope, activeRole());
+  applyStateDisables(scope);
+}
+
+function permissionNotice(container, action, context){
+  if(!container || can(activeRole(), action, context)) return;
+  [...container.children].forEach(child => {
+    if(child.classList && child.classList.contains('permission-notice')) child.remove();
+  });
+  container.prepend(renderPermissionNotice(action));
+}
+
+function setCapaWorkflowError(message){
+  const error = qs('capa-error');
+  if(error) error.textContent = message || '';
+}
+
+function closureBadge(status){
+  const key = CAPA_CLOSURE_STATUSES.includes(status) ? status : 'pending';
+  const badgeEl = renderStatusBadge(key);
+  badgeEl.classList.add(CLOSURE_META[key].className);
+  badgeEl.setAttribute('aria-label', `Cierre: ${statusLabel(key)}`);
+  return badgeEl;
+}
 
 function populateSelect(select, records, valueKey, labelFn, blankLabel){
   if(!select) return;
@@ -385,8 +465,12 @@ function renderNcList(){
     const actions = document.createElement('td');
     actions.className = 'table-actions';
     actions.appendChild(actionButton('Ver detalle', 'secondary', { ncDetail: nc.id }));
-    actions.appendChild(actionButton('Editar', 'secondary', { ncEdit: nc.id }));
-    actions.appendChild(actionButton('Eliminar', 'danger', { ncDelete: nc.id }));
+    const edit = actionButton('Editar', 'secondary', { ncEdit: nc.id });
+    edit.dataset.permission = 'edit_nc';
+    actions.appendChild(edit);
+    const remove = actionButton('Eliminar', 'danger', { ncDelete: nc.id });
+    remove.dataset.permission = 'delete_records';
+    actions.appendChild(remove);
     tr.appendChild(actions);
 
     tbody.appendChild(tr);
@@ -396,6 +480,7 @@ function renderNcList(){
   wrapper.className = 'table-scroll';
   wrapper.appendChild(table);
   host.appendChild(wrapper);
+  applyNcPermissions(host);
 }
 
 function renderNcHistory(nc){
@@ -507,11 +592,11 @@ function showNcDetail(id){
 
   const actions = document.createElement('div');
   actions.className = 'nc-detail-actions';
-  actions.append(
-    actionButton('Editar', 'secondary', { ncEdit: nc.id }),
-    actionButton('Gestionar CAPA', 'secondary', { ncCapa: nc.non_conformance_id }),
-    actionButton('Volver al listado', 'secondary', { ncBack: true })
-  );
+  const edit = actionButton('Editar', 'secondary', { ncEdit: nc.id });
+  edit.dataset.permission = 'edit_nc';
+  const manageCapa = actionButton('Gestionar CAPA', 'secondary', { ncCapa: nc.non_conformance_id });
+  manageCapa.dataset.permission = 'propose_capa';
+  actions.append(edit, manageCapa, actionButton('Volver al listado', 'secondary', { ncBack: true }));
   main.appendChild(actions);
 
   const side = document.createElement('div');
@@ -538,6 +623,7 @@ function showNcDetail(id){
       const meta = document.createElement('span');
       meta.textContent = `${employeeName(maps, action.responsible_employee_id)} · Vence ${action.due_date} · ${action.status}${isCapaOverdue(action) ? ' · Vencida' : ''}`;
       li.append(title, meta);
+      if(action.closure_status) li.appendChild(closureBadge(action.closure_status));
       capaList.appendChild(li);
     });
     capa.appendChild(capaList);
@@ -561,6 +647,8 @@ function showNcDetail(id){
 
   layout.append(main, side);
   body.appendChild(layout);
+  permissionNotice(main, 'edit_nc', { status: nc.status });
+  applyNcPermissions(body);
   renderEvidenceList(
     evidenceHost,
     evidenceFor('non_conformance', nc.non_conformance_id),
@@ -574,8 +662,7 @@ function renderReview(){
   const empty = qs('review-empty');
   if(!tbody) return;
   tbody.innerHTML = '';
-  const inspections = loadCollection('quality_inspections')
-    .filter(i => i.inspection_status === 'completed' && i.overall_result === 'conditional');
+  const inspections = loadCollection('quality_inspections').filter(isReviewableInspection);
   const maps = buildReferenceMaps();
 
   inspections.forEach(inspection => {
@@ -587,9 +674,13 @@ function renderReview(){
     tr.appendChild(cell(inspection.inspection_date));
 
     const result = document.createElement('td');
-    const badgeEl = document.createElement('span');
-    badgeEl.className = 'status-badge badge-conditional';
-    badgeEl.textContent = resultLabel(inspection.overall_result);
+    const proposed = inspection.proposed_result || inspection.proposedResult;
+    const finalResult = inspection.overall_result || inspection.overallResult || proposed;
+    const badgeEl = finalResult === 'conditional'
+      ? document.createElement('span')
+      : renderStatusBadge('pending_review');
+    if(finalResult === 'conditional') badgeEl.className = 'status-badge badge-conditional';
+    badgeEl.textContent = resultLabel(finalResult);
     result.appendChild(badgeEl);
     tr.appendChild(result);
 
@@ -612,6 +703,66 @@ function renderOverrideSelect(){
   );
 }
 
+function capaClosureControls(action){
+  const controls = document.createElement('div');
+  controls.className = 'capa-closure-controls';
+  const role = activeRole();
+  const context = capaContext(action);
+
+  if(action.status === 'completed' && (!action.closure_status || action.closure_status === 'rejected')){
+    controls.appendChild(workflowButton('Solicitar cierre', { ncCapaRequestClosure: action.id }, 'request_capa_closure', false));
+  }
+  if(action.closure_status === 'pending'){
+    if(can(role, 'register_effectiveness', context)){
+      const effectiveness = document.createElement('select');
+      effectiveness.dataset.capaEffectiveness = 'true';
+      effectiveness.setAttribute('aria-label', 'Resultado de eficacia');
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = '-- Selecciona eficacia --';
+      effectiveness.appendChild(blank);
+      EFFECTIVENESS_RESULTS.forEach(result => {
+        const option = document.createElement('option');
+        option.value = result;
+        option.textContent = EFFECTIVENESS_LABELS[result];
+        effectiveness.appendChild(option);
+      });
+      effectiveness.value = action.effectiveness_result || '';
+      const notes = document.createElement('textarea');
+      notes.dataset.capaEffectivenessNotes = 'true';
+      notes.rows = 2;
+      notes.placeholder = 'Observaciones de eficacia';
+      notes.value = action.effectiveness_observations || '';
+      const save = actionButton('Registrar eficacia', 'secondary', { ncCapaEffectivenessSave: action.id });
+      save.dataset.permission = 'register_effectiveness';
+      controls.append(effectiveness, notes, save);
+    }
+    if(can(role, 'review_capa_closure', context)){
+      const justification = document.createElement('input');
+      justification.type = 'text';
+      justification.dataset.capaClosureJustification = 'true';
+      justification.placeholder = 'Justificación de cierre';
+      justification.setAttribute('aria-label', 'Justificación de cierre');
+      const approve = actionButton('Aprobar cierre', 'secondary', { ncCapaClosureApprove: action.id });
+      approve.dataset.permission = 'review_capa_closure';
+      const reject = actionButton('Rechazar cierre', 'danger', { ncCapaClosureReject: action.id });
+      reject.dataset.permission = 'review_capa_closure';
+      controls.append(justification, approve, reject);
+    }
+    permissionNotice(controls, 'review_capa_closure', context);
+  }
+  if(action.closure_status === 'approved' || action.closure_status === 'rejected'){
+    const summary = document.createElement('span');
+    summary.className = 'nc-muted-meta';
+    summary.textContent = [
+      action.effectiveness_result ? EFFECTIVENESS_LABELS[action.effectiveness_result] || action.effectiveness_result : '',
+      action.closure_justification || ''
+    ].filter(Boolean).join(' · ');
+    controls.appendChild(summary);
+  }
+  return controls;
+}
+
 function renderCapaList(){
   const container = qs('capa-list');
   if(!container) return;
@@ -623,6 +774,7 @@ function renderCapaList(){
 
   const maps = buildReferenceMaps();
   const ncs = new Map(loadCollection('non_conformances').map(nc => [nc.non_conformance_id, nc]));
+  const role = activeRole();
 
   const table = document.createElement('table');
   table.className = 'data-table';
@@ -650,6 +802,7 @@ function renderCapaList(){
     badgeEl.className = 'status-badge';
     badgeEl.textContent = action.status;
     status.appendChild(badgeEl);
+    if(action.closure_status) status.appendChild(closureBadge(action.closure_status));
     if(isCapaOverdue(action)){
       const overdue = document.createElement('span');
       overdue.className = 'status-badge badge-overdue';
@@ -660,13 +813,20 @@ function renderCapaList(){
 
     const actionsCell = document.createElement('td');
     actionsCell.className = 'table-actions';
-    actionsCell.appendChild(actionButton('Editar', 'secondary', { capaEdit: action.id }));
-    actionsCell.appendChild(actionButton('Eliminar', 'danger', { capaDelete: action.id }));
+    if(can(role, 'complete_capa', capaContext(action))){
+      actionsCell.appendChild(workflowButton('Completar', { ncCapaComplete: action.id }, 'complete_capa', !['pending', 'in_progress'].includes(action.status)));
+    }
+    const edit = actionButton('Editar', 'secondary', { capaEdit: action.id });
+    edit.dataset.permission = 'edit_capa';
+    const remove = actionButton('Eliminar', 'danger', { capaDelete: action.id });
+    remove.dataset.permission = 'delete_records';
+    actionsCell.append(edit, remove, capaClosureControls(action));
     tr.appendChild(actionsCell);
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
   container.appendChild(table);
+  applyNcPermissions(container);
 }
 
 function renderQuarantine(){
@@ -826,6 +986,7 @@ export function renderNonConformance(){
   if(currentDetailId) showNcDetail(currentDetailId);
   if(!qs('capa-due').value) qs('capa-due').value = todayIso();
   if(!qs('nc-detected-date').value) qs('nc-detected-date').value = todayIso();
+  applyNcPermissions(qs('view-non-conformance') || document);
 }
 
 function startNcEdit(nc){
@@ -941,6 +1102,85 @@ function handleCapaSubmit(event){
   }
 }
 
+function reloadNcCapa(){
+  renderNonConformance();
+  setCapaWorkflowError('');
+}
+
+function completeNcCapa(action){
+  try{
+    assertCan(activeRole(), 'complete_capa', capaContext(action));
+    updateCorrectiveAction(action.id, { status: 'completed', progress: 100 });
+    reloadNcCapa();
+  }catch(err){
+    setCapaWorkflowError(err.message);
+  }
+}
+
+function requestNcCapaClosure(action){
+  try{
+    assertCan(activeRole(), 'request_capa_closure', capaContext(action));
+    invoke('requestCapaClosure', action.id, action.responsible_employee_id || activeRole());
+    reloadNcCapa();
+  }catch(err){
+    setCapaWorkflowError(err.message);
+  }
+}
+
+function saveNcEffectiveness(action, button){
+  const row = button.closest('tr');
+  const result = row && row.querySelector('[data-capa-effectiveness]') ? row.querySelector('[data-capa-effectiveness]').value : '';
+  const notesEl = row && row.querySelector('[data-capa-effectiveness-notes]');
+  const observations = notesEl ? notesEl.value.trim() : '';
+  if(!result || !observations){
+    setCapaWorkflowError('Registra la eficacia y sus observaciones antes de continuar.');
+    return;
+  }
+  try{
+    assertCan(activeRole(), 'register_effectiveness', capaContext(action));
+    invoke('registerCapaEffectiveness', action.id, result, observations, activeRole());
+    reloadNcCapa();
+  }catch(err){
+    setCapaWorkflowError(err.message);
+  }
+}
+
+function reviewNcCapaClosure(action, decision, button){
+  const row = button.closest('tr');
+  const resultEl = row && row.querySelector('[data-capa-effectiveness]');
+  const notesEl = row && row.querySelector('[data-capa-effectiveness-notes]');
+  const justificationEl = row && row.querySelector('[data-capa-closure-justification]');
+  const result = resultEl ? resultEl.value : '';
+  const observations = notesEl ? notesEl.value.trim() : '';
+  let justification = justificationEl ? justificationEl.value.trim() : '';
+  if(decision === 'rejected' && !justification && typeof prompt === 'function'){
+    justification = String(prompt('Justificación del rechazo del cierre') || '').trim();
+  }
+  if(result && !observations){
+    setCapaWorkflowError('Registra las observaciones de eficacia antes de decidir el cierre.');
+    return;
+  }
+  if(decision === 'rejected' && !justification){
+    setCapaWorkflowError('Registra la justificación para continuar.');
+    return;
+  }
+  try{
+    assertCan(activeRole(), 'review_capa_closure', capaContext(action));
+    invoke(
+      'reviewCapaClosure',
+      action.id,
+      decision,
+      result || null,
+      observations || null,
+      activeRole(),
+      justification || null
+    );
+    reloadNcCapa();
+  }catch(err){
+    setCapaWorkflowError(err.message);
+  }
+}
+
 function handleNcListClick(event){
   const button = event.target.closest('button');
   if(!button) return;
@@ -1006,6 +1246,27 @@ function handleCapaListClick(event){
   const button = event.target.closest('button');
   if(!button) return;
   const actions = loadCollection('corrective_actions');
+  if(button.dataset.ncCapaComplete){
+    const action = actions.find(a => a.id === button.dataset.ncCapaComplete);
+    if(action) completeNcCapa(action);
+    return;
+  }
+  if(button.dataset.ncCapaRequestClosure){
+    const action = actions.find(a => a.id === button.dataset.ncCapaRequestClosure);
+    if(action) requestNcCapaClosure(action);
+    return;
+  }
+  if(button.dataset.ncCapaEffectivenessSave){
+    const action = actions.find(a => a.id === button.dataset.ncCapaEffectivenessSave);
+    if(action) saveNcEffectiveness(action, button);
+    return;
+  }
+  if(button.dataset.ncCapaClosureApprove || button.dataset.ncCapaClosureReject){
+    const id = button.dataset.ncCapaClosureApprove || button.dataset.ncCapaClosureReject;
+    const action = actions.find(a => a.id === id);
+    if(action) reviewNcCapaClosure(action, button.dataset.ncCapaClosureApprove ? 'approved' : 'rejected', button);
+    return;
+  }
   if(button.dataset.capaEdit){
     const action = actions.find(a => a.id === button.dataset.capaEdit);
     if(action) startCapaEdit(action);
@@ -1030,7 +1291,11 @@ export function initNonConformanceCapa(){
 
   form.addEventListener('submit', handleOverrideSubmit);
   qs('nc-form').addEventListener('submit', handleNcSubmit);
-  qs('nc-create').addEventListener('click', () => openNcForm());
+  const ncCreate = qs('nc-create');
+  if(ncCreate){
+    ncCreate.dataset.permission = 'register_nc';
+    ncCreate.addEventListener('click', () => openNcForm());
+  }
   qs('nc-cancel').addEventListener('click', hideNcForm);
   qs('nc-form-back').addEventListener('click', hideNcForm);
   qs('nc-detail-back').addEventListener('click', hideNcDetail);

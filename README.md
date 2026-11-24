@@ -59,9 +59,9 @@ Abre en el navegador la dirección que muestra la terminal, normalmente **http:/
 
 ### Datos de prueba
 
-Al iniciar, la aplicación carga automáticamente **datos semilla** desde `src/seed-data.js`: 3 productos (harina de trigo, aceite vegetal y azúcar refinada), 4 empleados, 3 recepciones, 2 órdenes de producción y 2 despachos. Estos datos representan los otros módulos del ERP, que Control de Calidad consulta pero no crea.
+Al iniciar, la aplicación carga automáticamente **datos semilla** desde `src/seed-data.js`: 3 productos (harina de trigo, aceite vegetal y azúcar refinada), 4 empleados, 3 recepciones, 2 órdenes de producción y 2 despachos. Estos datos representan los otros módulos del ERP, que Control de Calidad consulta pero no crea. `ensureSeedData()` agrega 3 listas de verificación (2 con estado legado `active` y 1 `draft`), 6 documentos (`approved`, `under_review` y `draft`) y los parámetros/catálogos por defecto de calidad. La migración idempotente normaliza `active → approved` y `under_review → pending_review` antes de mostrar bandejas; los ejemplos de planes, inspecciones, NC, CAPA, evidencia, alertas y auditoría se generan en la demo guiada o en las pruebas, no se precargan en una instalación limpia.
 
-Los datos se guardan en el `localStorage` del navegador. Para **partir desde cero**, abre las herramientas de desarrollador (`F12`), ve a *Application → Local Storage*, borra los datos del sitio y recarga la página.
+Los datos se guardan en el `localStorage` del navegador con las claves `erp_base:*` y `erp_quality:*`. Para **partir desde cero**, abre las herramientas de desarrollador (`F12`), ve a *Application → Local Storage*, borra los datos del sitio y recarga la página. En **Configuración**, el botón **Restablecer valores** del Jefe de Calidad solo vuelve a los parámetros y catálogos por defecto.
 
 ---
 
@@ -97,7 +97,7 @@ En el MVP no hay inicio de sesión. El rol activo se elige con el selector **"Ro
 
 ## 4. Funcionalidades y navegación
 
-La barra lateral tiene un grupo **"Control de Calidad"**, integrado dentro del template del módulo base del ERP (Panel, Entidades, Documentos, Búsqueda).
+La barra lateral organiza el módulo en 5 categorías y 12 entradas (ver [Menú lateral](#menú-lateral-5-categorías-y-12-entradas)), integradas en el template del módulo base del ERP (Panel, Entidades, Documentos, Búsqueda).
 
 | Vista | Qué permite hacer |
 | :--- | :--- |
@@ -105,16 +105,78 @@ La barra lateral tiene un grupo **"Control de Calidad"**, integrado dentro del t
 | **Lotes pendientes** | Documentos origen sin inspección completada, con el botón **Inspeccionar**. |
 | **Planes** | Crear, editar, duplicar y eliminar planes por producto y etapa, y definir sus criterios: valor esperado, tolerancia, unidad, tipo de comparación (`range`, `min`, `max`, `boolean`) y si el criterio es crítico. Un plan con inspecciones queda bloqueado y se versiona duplicándolo. |
 | **Inspecciones** | Formulario de inspección con evaluación automática por criterio, guardado como borrador, dictamen calculado al completar y evidencias adjuntas (PNG, JPG o PDF de hasta 5 MB). |
-| **No conformidades** | Bandeja de revisión de inspecciones condicionales, cambio de dictamen con justificación, no conformidades (tipo, severidad, estado), acciones CAPA (responsable, causa raíz, tipo, fecha límite, estado), lotes en cuarentena y evidencias adjuntas de la no conformidad. |
+| **No conformidades** | Bandeja de revisión de inspecciones `pending_review` y `completed` condicionales sin `review_decision`, dictamen final con justificación, no conformidades (tipo, severidad, estado), acciones CAPA (responsable, causa raíz, tipo, fecha límite, estado), bandeja de cierre CAPA, lotes en cuarentena y evidencias adjuntas de la no conformidad. |
 | **Historial** | Trazabilidad desde la inspección hasta la no conformidad y la CAPA, con filtros por lote, módulo origen y rango de fechas, y exportación a CSV. |
 
 ### Reglas de negocio principales
 
-- **Dictamen automático:** `failed` si falla al menos un criterio crítico, `conditional` si solo fallan criterios no críticos y `passed` si todos cumplen. Las tolerancias son inclusivas.
-- **Inspección incompleta:** si falta alguna medición, la inspección queda en borrador (`draft`) y no recibe dictamen.
-- **No conformidad automática:** una inspección reprobada genera un borrador de no conformidad con descripción, severidad `major` y estado `open`.
+- **Dictamen propuesto:** `failed` si falla al menos un criterio crítico, `conditional` si solo fallan criterios no críticos y `passed` si todos cumplen. Las tolerancias son inclusivas y `pass_fail` nunca se captura a mano.
+- **Inspección incompleta:** si falta alguna medición, la inspección queda en borrador (`draft`), sin `proposed_result` ni dictamen.
+- **No conformidad automática:** solo una revisión válida con `review_decision = rejected` (`overall_result = failed`) genera un borrador de NC, con descripción autogenerada y editable, `defect_type = other`, severidad `major` y estado `open`. Ni los overrides ni la guarda de críticos la generan.
 - **Cuarentena:** un lote aparece en cuarentena mientras tenga una no conformidad `open` o `under_review`. Cuando tiene una CAPA asignada, se muestra como "Cuarentena - En tratamiento".
-- **CAPA vencida:** una acción no completada cuya fecha límite ya pasó se marca como vencida.
+- **CAPA vencida:** `due_date < hoy` y `closure_status != approved`; `completed` es ejecución reportada, no cierre aprobado.
+
+### Flujo canónico de calidad
+
+- **Planes y listas:** `draft → pending_approval → approved | rejected`. Un rechazado vuelve a `draft` al editarlo y conserva la justificación; un aprobado con historial se duplica como nueva versión. Solo `approved` se ofrece en una inspección.
+- **Documentos:** `draft → pending_review → approved | rejected`. `under_review` es legado equivalente a `pending_review`; `archived` queda fuera del flujo; el aprobado se versiona duplicándolo.
+- **Inspecciones:** flujo normal `draft → pending_review → completed`. Al enviar se calcula `proposed_result` y `overall_result` sigue `null`; `pending_review` no cuenta en KPIs ni libera el lote. La decisión del Jefe fija el resultado: `approved → passed`, `approved_conditional → conditional`, `rejected → failed`.
+- **Caso heredado:** `completed` con `proposed_result = conditional` y `review_decision = null` permanece en la bandeja sin retroceder a `pending_review`; sale con cualquier decisión. `overall_result = null` se excluye de KPIs.
+- **NC y CAPA:** la NC sigue `open → under_review → closed` y puede cerrarse sin CAPA aprobada. La CAPA separa ejecución (`pending → in_progress → completed`) de cierre (`closure_status: pending → approved | rejected`): `completed` deja el cierre en `pending`, el rechazo devuelve `status = in_progress` y la eficacia se registra antes de aprobar.
+- **Auditoría:** el envío emite una `status_change`, la decisión final una sola `approve`/`reject` sobre `overall_result` y el override otra `status_change`; las entradas se conservan tras eliminaciones permitidas.
+
+### Enumeraciones canónicas
+
+| Campo | Valores | Uso y regla |
+| :--- | :--- | :--- |
+| `inspection_status` | `draft`, `pending_review`, `completed` | Estado del flujo de inspección. `conditional` **nunca** es estado; en `draft` no hay dictamen. |
+| `review_decision` | `approved`, `approved_conditional`, `rejected` (o `null` antes de revisar) | Decisión del Jefe; `approved` y `approved_conditional` exigen críticos cumplidos y mediciones completas. |
+| `overall_result` y `proposed_result` | `passed`, `conditional`, `failed` (o `null` antes de la decisión) | Resultado final y propuesto. El motor calcula `proposed_result`; `overall_result` se deriva de la revisión. |
+| `status` de planes y listas | `draft`, `pending_approval`, `approved`, `rejected`; legado `archived` en listas | La decisión se conserva en `status` con revisor, fecha y justificación; no usan `review_decision`. |
+| `status` de documentos | `draft`, `pending_review`, `approved`, `rejected`; legado `under_review` y `archived` | `under_review` se migra a `pending_review`; `archived` no es seleccionable. |
+| `status` / `closure_status` de CAPA | `pending`, `in_progress`, `completed` / `pending`, `approved`, `rejected` | `status` es ejecución y `closure_status` es cierre: `completed` no significa cierre aprobado. |
+| `status` de NC | `open`, `under_review`, `closed` | Mantiene el lote en cuarentena mientras sea `open` o `under_review`. |
+| Tipos de evidencia | `entity_type`: `inspection`, `non_conformance`, `corrective_action`, `document`; `mime_type`: `image/png`, `image/jpeg`, `application/pdf` | La evidencia se vincula a una entidad existente; se admiten PNG, JPG y PDF. |
+
+### Matriz única de integridad y retención
+
+- Solo versiones `approved` de planes, listas y documentos se seleccionan; un plan sin criterios no inicia una inspección.
+- Evaluación con `range` inclusivo, `min`, `max` y `boolean`; `pass_fail` calculado, nunca capturado.
+- `approved` y `approved_conditional` se bloquean con críticos fallidos o mediciones faltantes; esa guarda no genera NC.
+- La NC automática solo nace de `rejected` en revisión válida y sin NC previa; no la generan overrides, cambios manuales ni creación manual.
+- Un cierre de CAPA no se aprueba sin eficacia; rechazar fija `closure_status = rejected` y `status = in_progress`.
+- Planes, listas y documentos aprobados con historial no se editan ni eliminan en la misma versión: se duplican. Una inspección con NC no se elimina.
+- Eliminar una NC elimina en cascada sus CAPA y evidencia; eliminar una CAPA o un documento elimina su evidencia; una inspección sin NC elimina resultados y evidencia en cascada.
+- `pending_review` no libera el lote; el legado condicional sin decisión tampoco; la cuarentena sale cuando esas NC pasan a `closed`.
+- Auditoría sin duplicados: envío = `status_change`; decisión = una sola `approve`/`reject`; override = una sola `status_change` sobre `overall_result`; eficacia CAPA = `review` separada. Una acción denegada no registra nada.
+
+### Menú lateral: 5 categorías y 12 entradas
+
+El menú es único, sin alias "Panel", "Dashboard" ni `quality-panel`. La sección activa se resalta con texto y `aria-current`.
+
+| Categoría | Entrada | ID exacto |
+| :--- | :--- | :--- |
+| GENERAL | Inicio / Dashboard | `quality-dashboard` |
+| GENERAL | Búsqueda | `quality-search` |
+| GESTIÓN DE CALIDAD | Planes de calidad | `quality-plans` |
+| GESTIÓN DE CALIDAD | Listas de verificación | `quality-checklists` |
+| GESTIÓN DE CALIDAD | Inspecciones | `quality-inspections` |
+| GESTIÓN DE CALIDAD | No conformidades | `quality-non-conformances` |
+| GESTIÓN DE CALIDAD | Acciones CAPA | `quality-capa` |
+| DOCUMENTACIÓN | Documentos | `quality-documents` |
+| DOCUMENTACIÓN | Aprobaciones pendientes | `quality-approvals` |
+| ANÁLISIS | Reportes | `quality-reports` |
+| ADMINISTRACIÓN | Entidades | `quality-entities` |
+| ADMINISTRACIÓN | Configuración | `quality-settings` |
+
+### Exportación CSV
+
+El historial se exporta en CSV UTF-8 respetando los filtros activos de lote y rango de fechas; un rango inválido (`desde > hasta`) bloquea la exportación. Columnas: **Lote, Producto, Plan, Etapa, Fecha, Inspector, Dictamen, Estado y `resultados`**. La columna `resultados` resume cada criterio como `criterio:medido:cumple`, separado por `;`. El dashboard exporta además los KPIs a CSV. Las exportaciones son vistas derivadas: no se persisten.
+
+### Evidencia y alertas
+
+- **Evidencia:** PNG, JPG o PDF; hasta **5 MB por archivo** y **8 MB acumulados** en la colección. Si se supera la cuota de `localStorage` (`QuotaExceededError`) se rechaza la carga sin perder la evidencia ya guardada. Cada archivo conserva nombre, mime, tamaño, autor, fecha, vista previa y descarga. El archivo principal de un documento usa su propia validación y límite de 10 MB, distinto de esta cuota.
+- **Alertas:** reglas sobre `approval_rate`, `open_non_conformances`, `overdue_capa`, `capa_effectiveness` y `pending_inspections`, con operador (`lt`, `lte`, `gt`, `gte`, `eq`), umbral y severidad (`info`, `warning`, `critical`). Se crean desde **Dashboard** o **Configuración**, se pueden desactivar/activar y eliminar, y no se permite más de una regla activa por métrica y operador. Son informativas: no bloquean ni generan NC.
 
 ---
 
@@ -134,18 +196,21 @@ La barra lateral tiene un grupo **"Control de Calidad"**, integrado dentro del t
 
 ![Modelo Entidad-Relación del módulo de Control de Calidad](specs/002-quality-control-module/mer.png)
 
-El módulo agrega **8 tablas** propias y se relaciona con **5 tablas** de otros módulos del ERP:
+El módulo agrega **11 tablas** propias y se relaciona con **5 tablas** de otros módulos del ERP:
 
 | Tabla | Descripción |
 | :--- | :--- |
-| `quality_inspection_plans` | Plan de inspección por producto y etapa (`incoming`, `in_process`, `final`). |
+| `quality_inspection_plans` | Plan de inspección por producto y etapa (`incoming`, `in_process`, `final`), con `status` de aprobación y versionado. |
 | `quality_inspection_criteria` | Parámetros del plan: valor esperado, tolerancia, unidad, tipo de comparación y criticidad. |
-| `quality_inspections` | Inspección ejecutada, con su referencia polimórfica al lote (`reference_module` + `reference_id`), el inspector, el estado, el dictamen y la auditoría de cambios de dictamen. |
+| `quality_checklists` | Listas de verificación aprobables y versionadas, con criterios y evaluaciones. |
+| `quality_documents` | Documentos de calidad con código, versión, responsable, archivo principal y `status`. |
+| `quality_inspections` | Inspección ejecutada, con su referencia polimórfica al lote (`reference_module` + `reference_id`), el inspector, `inspection_status`, `review_decision` y `overall_result`. |
 | `quality_inspection_results` | Medición por criterio y su cumplimiento (`pass_fail`), calculado por el sistema. |
 | `non_conformances` | Desviaciones detectadas: tipo de defecto, severidad y estado. |
-| `corrective_actions` | Acciones CAPA: responsable, causa raíz, tipo de acción, fecha límite y estado. |
-| `quality_evidence` | Archivos de evidencia asociados a inspecciones o no conformidades. |
-| `quality_alert_rules` | Reglas de alerta sobre los KPIs del dashboard. |
+| `corrective_actions` | Acciones CAPA: responsable, causa raíz, tipo de acción, fecha límite, `status` y `closure_status`. |
+| `quality_evidence` | Archivos PNG/JPG/PDF vinculados a inspecciones, NC, CAPA o documentos. |
+| `quality_alert_rules` | Reglas de alerta informativas sobre los KPIs del dashboard. |
+| `quality_audit_log` | Bitácora de altas, envíos, decisiones, cambios de estado y eliminaciones permitidas. |
 | *Externas:* `products`, `employees`, `goods_receipts`, `production_orders`, `shipments` | Datos de los otros módulos del ERP. Solo se consultan y validan. |
 
 El diccionario de datos completo, con tipos, restricciones y reglas de integridad, está en [`specs/002-quality-control-module/data-model.md`](specs/002-quality-control-module/data-model.md).

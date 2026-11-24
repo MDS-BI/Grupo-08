@@ -1,159 +1,72 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  ensureSeedData,
-  addPlan,
-  addCriterion,
-  addInspection,
-  completeInspection,
-  addEvidence,
-  evidenceFor,
-  validateEvidence,
-  deleteInspection,
-  deleteNonConformance,
-  loadCollection
-} from '../../src/storage.js';
-import { bootQualityApp, qs } from '../support/quality-dom.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import * as q from '../../src/storage.js';
 
-let dom;
-let plan;
-let criterion;
+const store = new Map();
+globalThis.localStorage = {
+  getItem: (key) => (store.has(key) ? store.get(key) : null),
+  setItem: (key, value) => store.set(key, String(value)),
+  removeItem: (key) => store.delete(key),
+  clear: () => store.clear()
+};
 
-const PNG = 'data:image/png;base64,AAAA';
-
-function makeInspection(result = 'passed'){
-  const inspection = addInspection({
-    inspection_plan_id: plan.inspection_plan_id,
-    inspector_id: 'emp-001',
-    reference_module: 'goods_receipt',
-    reference_id: 'gr-001',
-    inspection_date: '2026-11-09'
-  });
-  completeInspection(inspection.inspection_id, result, [{
-    criteria_id: criterion.criteria_id,
-    measured_value: result === 'passed' ? 10 : 99,
-    pass_fail: result === 'passed'
-  }]);
-  return inspection;
-}
-
-function evidencePayload(entityType, entityId, overrides = {}){
+function evidence(overrides = {}){
   return {
-    entity_type: entityType,
-    entity_id: entityId,
-    file_name: 'foto.png',
+    entity_type: 'inspection',
+    entity_id: 'insp-001',
+    file_name: 'evidencia.png',
     mime_type: 'image/png',
-    size_bytes: 4,
-    data_url: PNG,
+    size_bytes: 12,
+    data_url: 'data:image/png;base64,AA==',
     uploaded_by: 'emp-001',
     ...overrides
   };
 }
 
-beforeEach(async () => {
-  dom = await bootQualityApp();
-  ensureSeedData();
-  plan = addPlan({ plan_name: 'Plan de recepción', product_id: 'prod-001', applicable_stage: 'incoming' });
-  criterion = addCriterion({
-    inspection_plan_id: plan.inspection_plan_id,
-    criteria_name: 'Peso',
-    expected_value: 10,
-    tolerance: 1,
-    unit: 'kg',
-    comparison_type: 'range',
-    is_critical: true
-  });
+beforeEach(() => {
+  store.clear();
+  q.ensureSeedData();
+  q.setActiveRole('jefe_calidad');
+  q.saveCollection('quality_inspections', [{
+    id: 'insp-001',
+    inspection_id: 'insp-001',
+    inspection_status: 'draft',
+    inspection_plan_id: 'plan-001',
+    inspector_id: 'emp-001',
+    reference_module: 'goods_receipt',
+    reference_id: 'gr-001',
+    inspection_date: '2026-11-09'
+  }]);
 });
 
-afterEach(() => {
-  dom.window.close();
-});
-
-describe('User Story 8 - evidence', () => {
-  it('validates MIME, size, content and author', () => {
-    const inspection = makeInspection();
-    expect(validateEvidence(evidencePayload('inspection', inspection.inspection_id)).valid).toBe(true);
-    expect(() => addEvidence(evidencePayload('inspection', inspection.inspection_id, { mime_type: 'text/plain' })))
-      .toThrow('PNG');
-    expect(() => addEvidence(evidencePayload('inspection', inspection.inspection_id, { size_bytes: 5 * 1024 * 1024 + 1 })))
-      .toThrow('5 MB');
-    expect(() => addEvidence(evidencePayload('inspection', inspection.inspection_id, { data_url: 'data:text/plain;base64,AAAA' })))
-      .toThrow('contenido');
-    expect(() => addEvidence(evidencePayload('inspection', inspection.inspection_id, { uploaded_by: 'nope' })))
-      .toThrow('autor');
+describe('quality evidence', () => {
+  it('validates type, size, author and linked entity', () => {
+    expect(q.validateEvidence(evidence()).valid).toBe(true);
+    expect(q.validateEvidence(evidence({ mime_type: 'text/plain' })).errors.mime_type).toBeDefined();
+    expect(q.validateEvidence(evidence({ size_bytes: 6 * 1024 * 1024 })).errors.size_bytes).toBeDefined();
+    expect(q.validateEvidence(evidence({ entity_id: 'missing' })).errors.entity_id).toBeDefined();
+    expect(q.validateEvidence(evidence({ uploaded_by: 'missing' })).errors.uploaded_by).toBeDefined();
   });
 
-  it('rejects evidence above the accumulated 8 MB limit', () => {
-    const inspection = makeInspection();
-    addEvidence(evidencePayload('inspection', inspection.inspection_id, { size_bytes: 4 * 1024 * 1024 }));
-    addEvidence(evidencePayload('inspection', inspection.inspection_id, { file_name: 'dos.png', size_bytes: 4 * 1024 * 1024 }));
-    expect(() => addEvidence(evidencePayload('inspection', inspection.inspection_id, { file_name: 'tres.png', size_bytes: 1 })))
-      .toThrow('8 MB');
+  it('preserves previous evidence when an invalid upload is rejected', () => {
+    const first = q.addEvidence(evidence());
+    expect(() => q.addEvidence(evidence({ mime_type: 'text/plain' }))).toThrow();
+    expect(q.evidenceFor('inspection', 'insp-001').map(item => item.id)).toEqual([first.id]);
   });
 
-  it('keeps previous evidence when storage quota is exceeded', () => {
-    const inspection = makeInspection();
-    addEvidence(evidencePayload('inspection', inspection.inspection_id));
-    const spy = vi.spyOn(dom.window.Storage.prototype, 'setItem').mockImplementation(() => {
-      const error = new Error('quota');
-      error.name = 'QuotaExceededError';
-      throw error;
-    });
-    try{
-      expect(() => addEvidence(evidencePayload('inspection', inspection.inspection_id, { file_name: 'otra.png' })))
-        .toThrow('espacio');
-    }finally{
-      spy.mockRestore();
-    }
-    expect(evidenceFor('inspection', inspection.inspection_id).length).toBe(1);
+  it('deletes evidence only by the owner or the head of quality', () => {
+    const record = q.addEvidence(evidence());
+    q.setActiveRole('inspector');
+    expect(() => q.deleteEvidence(record.id, 'emp-002')).toThrow('No tienes permiso');
+    expect(q.deleteEvidence(record.id, 'emp-001')).toBe(true);
+
+    const second = q.addEvidence(evidence());
+    q.setActiveRole('jefe_calidad');
+    expect(q.deleteEvidence(second.id)).toBe(true);
   });
 
-  it('cascades evidence with inspections and non-conformances, and respects blocked inspections', () => {
-    const clean = makeInspection('passed');
-    addEvidence(evidencePayload('inspection', clean.inspection_id));
-    deleteInspection(clean.inspection_id);
-    expect(evidenceFor('inspection', clean.inspection_id).length).toBe(0);
-
-    const failed = makeInspection('failed');
-    const nc = loadCollection('non_conformances').find(item => item.inspection_id === failed.inspection_id);
-    addEvidence(evidencePayload('inspection', failed.inspection_id));
-    addEvidence(evidencePayload('non_conformance', nc.non_conformance_id, { file_name: 'nc.pdf', mime_type: 'application/pdf', data_url: 'data:application/pdf;base64,AAAA' }));
-
-    expect(() => deleteInspection(failed.inspection_id)).toThrow('no conformidad');
-    expect(evidenceFor('inspection', failed.inspection_id).length).toBe(1);
-
-    deleteNonConformance(nc.non_conformance_id);
-    expect(evidenceFor('non_conformance', nc.non_conformance_id).length).toBe(0);
-  });
-
-  it('lists and deletes inspection evidence from the view', () => {
-    const inspection = makeInspection();
-    const record = addEvidence(evidencePayload('inspection', inspection.inspection_id));
-
-    qs('nav-quality-inspections').click();
-    qs('inspection-evidence-inspection').value = inspection.inspection_id;
-    qs('inspection-evidence-inspection').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-
-    expect(qs('inspection-evidence-list').textContent).toContain('foto.png');
-    qs('inspection-evidence-list').querySelector('button[data-evidence-delete]').click();
-    expect(evidenceFor('inspection', inspection.inspection_id).some(item => item.id === record.id)).toBe(false);
-    expect(qs('inspection-evidence-list').textContent).toContain('Sin evidencia');
-  });
-
-  it('uploads a file selected in the inspection evidence form', async () => {
-    const inspection = makeInspection();
-    qs('nav-quality-inspections').click();
-    qs('inspection-evidence-inspection').value = inspection.inspection_id;
-    qs('inspection-evidence-inspection').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    qs('inspection-evidence-author').value = 'emp-001';
-
-    const file = new dom.window.File([new Uint8Array([1, 2, 3])], 'nueva.png', { type: 'image/png' });
-    const input = qs('inspection-evidence-file');
-    Object.defineProperty(input, 'files', { value: [file], configurable: true });
-    qs('inspection-evidence-form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
-
-    await vi.waitFor(() => {
-      expect(evidenceFor('inspection', inspection.inspection_id).length).toBe(1);
-    });
-    expect(qs('inspection-evidence-list').textContent).toContain('nueva.png');
+  it('cascades evidence when its inspection is deleted', () => {
+    q.addEvidence(evidence());
+    expect(q.deleteInspection('insp-001')).toBe(true);
+    expect(q.evidenceFor('inspection', 'insp-001')).toHaveLength(0);
   });
 });

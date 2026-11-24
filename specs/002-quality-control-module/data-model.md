@@ -1,17 +1,35 @@
 # Modelo de Datos: Módulo de Control de Calidad
 
-**Módulo:** Control de Calidad  
-**Proyecto:** ERP Frontend MVP — Modelación de Sistemas (UdeC)  
-**Modelo relacionado:** [Módulo Base ERP](../001-erp-base-module/data-model.md)
+**Módulo:** Control de Calidad
+**Proyecto:** ERP Frontend MVP — Modelación de Sistemas (UdeC)
+**Actualizado:** 2026-11-24
+**Fuente canónica:** [spec.md](spec.md)
+**Contratos:** [quality-storage.md](contracts/quality-storage.md), [inspection-engine.md](contracts/inspection-engine.md), [quality-workflow.md](contracts/quality-workflow.md), [quality-permissions.md](contracts/quality-permissions.md)
 
 ## 1. Propósito y alcance
 
-Este documento define las estructuras de datos para gestionar el control de calidad preventivo y operativo: planes y criterios de inspección, inspecciones, resultados, no conformidades y acciones correctivas o preventivas (CAPA). Además, modela la evidencia documental adjunta a inspecciones y no conformidades y las reglas de alerta configurables sobre los indicadores del dashboard.
+Este documento define las estructuras para gestionar planes y criterios de inspección, listas de verificación, documentos de calidad, inspecciones, resultados, no conformidades, acciones CAPA, evidencia, alertas y auditoría.
 
-El módulo se integra con productos, empleados, recepciones, órdenes de producción y despachos. Estas entidades son dependencias de otros módulos ERP; no se consideran creadas por este modelo de Control de Calidad. El "lote" de las historias de usuario se representa mediante el documento origen (`reference_module` + `reference_id`); no existe una entidad de lote separada.
+El módulo se integra con productos, empleados, recepciones, órdenes de producción y despachos. Esas entidades son dependencias externas y no se crean desde Control de Calidad. El "lote" se representa mediante el documento origen (`reference_module` + `reference_id`); no existe una entidad de lote separada.
 
-## 2. Diagrama entidad-relación
-![Modelo Entidad-Relación](mer.png)
+El MVP usa `localStorage`, identificadores `string` y marcas de tiempo ISO. El diseño relacional se conserva como modelo lógico; cualquier implementación con claves `INT` requiere una capa de mapeo explícita.
+
+La capa visual de US15 es derivada: menú, dashboard, bandejas, cuarentena, búsquedas y estados visuales se calculan a partir de las entidades existentes. No crea entidades nuevas ni claves de almacenamiento adicionales.
+
+## 2. Principios del modelo
+
+- **Fuente canónica.** La terminología, los contratos de revisión y los KPIs provienen de `spec.md`; la matriz de permisos de `contracts/quality-permissions.md`.
+- **Estado, decisión y resultado separados.** `inspection_status` es `draft|pending_review|completed`; `review_decision` es `approved|approved_conditional|rejected`; `overall_result` es `passed|conditional|failed`. `conditional` nunca es un estado de inspección.
+- **Resultado propuesto y final separados.** `proposed_result` lo calcula el motor; `overall_result` se deriva de la revisión. Ninguno se captura manualmente en `draft`.
+- **Flujo normal y excepción.** El flujo normal es `draft → pending_review → completed`. El caso heredado `completed` con `proposed_result = conditional` y `review_decision = null` va en bandeja, conserva su estado y sale al registrar cualquier decisión.
+- **Aprobado es inmutable.** Planes, listas y documentos aprobados no se editan en la misma versión; se duplican.
+- **Historial conservado.** Las versiones anteriores y las entradas de auditoría permanecen aunque el registro se elimine.
+- **NC con trigger único.** La no conformidad automática solo se genera por `review_decision = rejected` en revisión válida y sin NC previa. Overrides, cambios manuales y la guarda de críticos no generan NC.
+- **CAPA con cierres separados.** `status` es ejecución y `closure_status` es cierre. `completed` no significa cierre aprobado.
+- **Auditoría sin duplicados.** El envío registra `status_change`; la decisión final, una sola entrada `approve`/`reject` sobre `overall_result`; el override posterior, una sola `status_change` sobre `overall_result`.
+- **Migración idempotente.** Los datos legados se normalizan antes de renderizar bandejas, sin pérdida ni duplicación.
+
+## 3. Diagrama entidad-relación
 
 ```mermaid
 erDiagram
@@ -21,298 +39,440 @@ erDiagram
     EMPLOYEES {
         string employee_id PK
     }
-    GOODS_RECEIPTS {
-        string goods_receipt_id PK
-    }
-    PRODUCTION_ORDERS {
-        string production_order_id PK
-    }
-    SHIPMENTS {
-        string shipment_id PK
-    }
-
     QUALITY_INSPECTION_PLANS {
         string inspection_plan_id PK
-        string product_id FK
-        varchar plan_name
-        varchar applicable_stage
-        boolean is_locked
+        string version_group_id
+        int version
+        string status
     }
     QUALITY_INSPECTION_CRITERIA {
         string criteria_id PK
         string inspection_plan_id FK
-        varchar criteria_name
-        decimal expected_value
-        decimal tolerance
-        varchar unit
-        varchar comparison_type
-        boolean is_critical
-        boolean is_locked
+    }
+    QUALITY_CHECKLISTS {
+        string checklist_id PK
+        string version_group_id
+        int version
+        string status
+    }
+    QUALITY_DOCUMENTS {
+        string id PK
+        string document_id
+        string version_group_id
+        int version
+        string status
     }
     QUALITY_INSPECTIONS {
         string inspection_id PK
         string inspection_plan_id FK
-        string inspector_id FK
-        varchar reference_module
-        string reference_id
-        date inspection_date
-        varchar inspection_status
-        varchar overall_result
-        text override_justification
-        varchar overridden_by
-        timestamp override_at
+        string checklist_id FK
+        string inspection_status
+        string proposed_result
+        string overall_result
+        string review_decision
     }
     QUALITY_INSPECTION_RESULTS {
         string result_id PK
         string inspection_id FK
         string criteria_id FK
-        decimal measured_value
-        boolean pass_fail
     }
     NON_CONFORMANCES {
         string non_conformance_id PK
         string inspection_id FK
-        string product_id FK
-        text description
-        varchar defect_type
-        varchar severity
-        varchar status
+        string status
     }
     CORRECTIVE_ACTIONS {
         string corrective_action_id PK
         string non_conformance_id FK
-        string responsible_employee_id FK
-        text action_description
-        text root_cause
-        varchar action_type
-        date due_date
-        varchar status
+        string status
+        string closure_status
+        string effectiveness_result
     }
     QUALITY_EVIDENCE {
         string evidence_id PK
         string entity_type
         string entity_id
-        varchar file_name
-        varchar mime_type
-        int size_bytes
-        text data_url
-        string uploaded_by
-        timestamp uploaded_at
     }
     QUALITY_ALERT_RULES {
         string alert_rule_id PK
-        varchar metric
-        varchar operator
-        decimal threshold
-        varchar severity
-        boolean is_active
+        string metric
+    }
+    QUALITY_AUDIT_LOG {
+        string id PK
+        string entity_type
+        string action
     }
 
-    PRODUCTS ||--o{ QUALITY_INSPECTION_PLANS : "define plan para"
-    PRODUCTS ||--o{ NON_CONFORMANCES : "producto afectado"
+    PRODUCTS ||--o{ QUALITY_INSPECTION_PLANS : "aplica a"
     EMPLOYEES ||--o{ QUALITY_INSPECTIONS : "ejecuta"
-    EMPLOYEES ||--o{ CORRECTIVE_ACTIONS : "responsable"
+    EMPLOYEES ||--o{ QUALITY_DOCUMENTS : "responsable"
     QUALITY_INSPECTION_PLANS ||--|{ QUALITY_INSPECTION_CRITERIA : "contiene"
-    QUALITY_INSPECTION_PLANS ||--o{ QUALITY_INSPECTIONS : "guia"
-    QUALITY_INSPECTION_CRITERIA ||--o{ QUALITY_INSPECTION_RESULTS : "se evalua en"
+    QUALITY_INSPECTION_PLANS ||--o{ QUALITY_INSPECTIONS : "guía"
+    QUALITY_CHECKLISTS ||--o{ QUALITY_INSPECTIONS : "evalúa"
     QUALITY_INSPECTIONS ||--|{ QUALITY_INSPECTION_RESULTS : "registra"
     QUALITY_INSPECTIONS ||--o{ NON_CONFORMANCES : "origina"
     NON_CONFORMANCES ||--o{ CORRECTIVE_ACTIONS : "requiere"
-    QUALITY_INSPECTIONS ||--o{ QUALITY_EVIDENCE : "evidencia de"
-    NON_CONFORMANCES ||--o{ QUALITY_EVIDENCE : "evidencia de"
-    GOODS_RECEIPTS ||--o{ QUALITY_INSPECTIONS : "referencia polimorfica"
-    PRODUCTION_ORDERS ||--o{ QUALITY_INSPECTIONS : "referencia polimorfica"
-    SHIPMENTS ||--o{ QUALITY_INSPECTIONS : "referencia polimorfica"
+    QUALITY_INSPECTIONS ||--o{ QUALITY_EVIDENCE : "evidencia"
+    NON_CONFORMANCES ||--o{ QUALITY_EVIDENCE : "evidencia"
+    CORRECTIVE_ACTIONS ||--o{ QUALITY_EVIDENCE : "evidencia"
+    QUALITY_DOCUMENTS ||--o{ QUALITY_EVIDENCE : "evidencia"
 ```
 
-Las relaciones desde recepciones, órdenes de producción y despachos representan referencias polimórficas: `reference_module` identifica el módulo de origen y `reference_id` identifica su registro. No son claves foráneas convencionales y requieren validación de la aplicación o una estrategia de integración equivalente.
+Las relaciones de lote son polimórficas: `reference_module` identifica el módulo (`goods_receipt`, `production_order`, `shipment`) y `reference_id` el registro origen. La aplicación valida ambos valores. No hay entidades para lote, bandeja, cuarentena, dashboard ni capa visual.
 
-> **Nota de implementación.** El diagrama usa identificadores `string` para reflejar el MVP frontend con `localStorage`, coherente con el módulo base. Si se implementa el diseño relacional lógico con claves `INT`, debe existir una capa de mapeo explícita `INT ↔ string` documentada en [contracts/quality-storage.md](contracts/quality-storage.md). Las reglas de negocio y cardinalidades no cambian.
+## 4. Diccionario de datos
 
-## 3. Diccionario de datos
+### 4.1 `quality_inspection_plans`
 
-### 3.1 `quality_inspection_plans`
-
-Define las pautas de control aplicables a un producto.
-
-| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+| Campo | Tipo | Clave | Restricción | Descripción |
 |---|---|---|---|---|
-| `inspection_plan_id` | STRING | PK | Autogenerado | Identificador único del plan. |
-| `product_id` | STRING | FK | `products.product_id` | Producto al que se aplica el plan. |
-| `plan_name` | VARCHAR | — | Not Null | Nombre descriptivo del plan. |
-| `applicable_stage` | VARCHAR | — | `incoming`, `in_process`, `final` | Etapa en que se aplica la inspección. |
-| `is_locked` | BOOLEAN | — | Default `false` | Indica que el plan tiene inspecciones históricas y no puede editarse ni eliminarse. |
+| `id` | STRING | PK | Único | Identificador interno del registro. |
+| `inspection_plan_id` | STRING | UK | Único por versión | Identificador del plan usado por inspecciones. |
+| `version_group_id` | STRING | - | Not Null | Identificador de la familia de versiones. |
+| `version` | INT | - | ≥ 1; default 1 | Número de versión. |
+| `version_of` | STRING | FK | Opcional | `id` de la versión anterior. |
+| `product_id` | STRING | FK | `products.product_id` | Producto al que aplica. |
+| `plan_name` | VARCHAR | - | Not Null | Nombre descriptivo. |
+| `applicable_stage` | VARCHAR | - | `incoming`, `in_process`, `final` | Etapa de aplicación. |
+| `status` | VARCHAR | - | `draft`, `pending_approval`, `approved`, `rejected` | Estado del plan; la decisión se conserva aquí, no en `review_decision`. |
+| `submitted_by` | STRING | - | Opcional | Empleado o rol que envía a aprobación. |
+| `submitted_at` | TIMESTAMP | - | Opcional | Fecha de envío. |
+| `reviewed_by` | STRING | - | Opcional | Empleado o rol que decide. |
+| `reviewed_at` | TIMESTAMP | - | Opcional | Fecha de la decisión. |
+| `review_justification` | TEXT | - | Obligatorio al rechazar | Motivo de la decisión. |
+| `is_locked` | BOOLEAN | - | Default `false` | `true` si tiene inspecciones históricas. |
+| `created_by` | STRING | - | Opcional | Empleado o rol creador. |
+| `createdAt` / `updatedAt` | TIMESTAMP | - | ISO 8601 | Marcas de tiempo. |
 
-### 3.2 `quality_inspection_criteria`
+**Reglas:** solo `approved` se ofrece para inspecciones; un plan rechazado vuelve a `draft` al editarse; un plan aprobado con inspecciones históricas se duplica como nueva versión.
 
-Detalla los parámetros que deben evaluarse para un plan.
+### 4.2 `quality_inspection_criteria`
 
-| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+| Campo | Tipo | Clave | Restricción | Descripción |
 |---|---|---|---|---|
-| `criteria_id` | STRING | PK | Autogenerado | Identificador único del criterio. |
-| `inspection_plan_id` | STRING | FK | `quality_inspection_plans.inspection_plan_id` | Plan al que pertenece el criterio. |
-| `criteria_name` | VARCHAR | — | Not Null | Variable o parámetro que se evalúa (por ejemplo, peso, pH o dimensión). |
-| `expected_value` | DECIMAL | — | Not Null | Valor o límite estándar de referencia. |
-| `tolerance` | DECIMAL | — | Not Null, >= 0 | Margen de tolerancia permitido para `range`. |
-| `unit` | VARCHAR | — | Not Null | Unidad de medida (kg, °C, mm, etc.). |
-| `comparison_type` | VARCHAR | — | `range`, `min`, `max`, `boolean` | Regla de comparación aplicada al medir. |
-| `is_critical` | BOOLEAN | — | Not Null | Indica si el incumplimiento genera `failed`. |
-| `is_locked` | BOOLEAN | — | Default `false` | Indica que el criterio tiene resultados históricos y no puede editarse ni eliminarse. |
+| `id` | STRING | PK | Único | Identificador interno. |
+| `criteria_id` | STRING | UK | Único | Identificador del criterio. |
+| `inspection_plan_id` | STRING | FK | Plan existente | Plan al que pertenece. |
+| `criteria_name` | VARCHAR | - | Not Null | Variable o parámetro. |
+| `expected_value` | DECIMAL | - | Not Null; numérico | Valor o límite estándar. |
+| `tolerance` | DECIMAL | - | ≥ 0 | Margen para `range`. |
+| `unit` | VARCHAR | - | Not Null | Unidad de medida. |
+| `comparison_type` | VARCHAR | - | `range`, `min`, `max`, `boolean` | Regla de comparación. |
+| `is_critical` | BOOLEAN | - | Not Null | Si falla, el resultado no puede ser `passed`. |
+| `is_locked` | BOOLEAN | - | Default `false` | `true` si tiene resultados históricos. |
 
-### 3.3 `quality_inspections`
+### 4.3 `quality_checklists`
 
-Registra un evento de inspección.
-
-| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+| Campo | Tipo | Clave | Restricción | Descripción |
 |---|---|---|---|---|
-| `inspection_id` | STRING | PK | Autogenerado | Identificador único de la inspección. |
-| `inspection_plan_id` | STRING | FK | `quality_inspection_plans.inspection_plan_id` | Plan utilizado. |
-| `inspector_id` | STRING | FK | `employees.employee_id` | Empleado que ejecuta la inspección. |
-| `reference_module` | VARCHAR | Polimórfica | `goods_receipt`, `production_order`, `shipment` | Módulo del registro inspeccionado. |
-| `reference_id` | STRING | Polimórfica | ID del registro origen | Identificador del lote/documento inspeccionado. |
-| `inspection_date` | DATE | — | Not Null | Fecha de realización. |
-| `inspection_status` | VARCHAR | — | `draft`, `completed` | Estado del registro de inspección. |
-| `overall_result` | VARCHAR | — | `passed`, `failed`, `conditional`; Null mientras `draft` | Dictamen global derivado. |
-| `override_justification` | TEXT | — | Obligatorio si cambia el dictamen | Motivo registrado del cambio manual. |
-| `overridden_by` | VARCHAR | — | Obligatorio si cambia el dictamen | Usuario o rol que autoriza el cambio. |
-| `override_at` | TIMESTAMP | — | Obligatorio si cambia el dictamen | Fecha y hora del cambio de dictamen. |
+| `id` | STRING | PK | Único | Identificador interno. |
+| `checklist_id` | STRING | UK | Único por versión | Identificador usado por inspecciones. |
+| `version_group_id` | STRING | - | Not Null | Familia de versiones. |
+| `version` | INT | - | ≥ 1; default 1 | Número de versión. |
+| `version_of` | STRING | FK | Opcional | Versión anterior. |
+| `name` | VARCHAR | - | Not Null | Nombre de la lista. |
+| `category` | VARCHAR | - | Not Null | Categoría. |
+| `description` | TEXT | - | Opcional | Descripción. |
+| `status` | VARCHAR | - | `draft`, `pending_approval`, `approved`, `rejected`; legado `archived` | Estado; `archived` queda fuera del flujo. |
+| `submitted_by` / `submitted_at` | STRING / TIMESTAMP | - | Opcional | Envío a aprobación. |
+| `reviewed_by` / `reviewed_at` | STRING / TIMESTAMP | - | Opcional | Decisión. |
+| `review_justification` | TEXT | - | Obligatorio al rechazar | Motivo. |
+| `criteria` | ARRAY | - | ≥ 1 para enviar | Criterios de la lista. |
+| `evaluations` | ARRAY | - | Default `[]` | Evaluaciones legadas o históricas. |
+| `is_locked` | BOOLEAN | - | Default `false` | `true` con evaluaciones/inspecciones históricas. |
+| `created_by` | STRING | - | Opcional | Creador. |
+| `createdAt` / `updatedAt` | TIMESTAMP | - | ISO 8601 | Marcas de tiempo. |
 
-### 3.4 `quality_inspection_results`
+**Reglas:** solo `approved` se ofrece para inspecciones; `archived` es legado no seleccionable; una lista aprobada con historial se duplica.
 
-Almacena las mediciones de cada criterio evaluado durante una inspección.
+### 4.4 `quality_documents`
 
-| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+| Campo | Tipo | Clave | Restricción | Descripción |
 |---|---|---|---|---|
-| `result_id` | STRING | PK | Autogenerado | Identificador único del resultado. |
-| `inspection_id` | STRING | FK | `quality_inspections.inspection_id` | Inspección a la que pertenece. |
-| `criteria_id` | STRING | FK | `quality_inspection_criteria.criteria_id` | Criterio evaluado. |
-| `measured_value` | DECIMAL | — | Not Null | Valor numérico obtenido en la medición. |
-| `pass_fail` | BOOLEAN | — | Not Null, calculado | Indica si el criterio se cumple. |
+| `id` | STRING | PK | Único | Identificador interno de la versión. |
+| `document_id` | VARCHAR | UK lógica | Código `DOC-###`, compartido entre versiones | Código del documento. |
+| `version_group_id` | STRING | - | Not Null | Familia de versiones. |
+| `version` | INT | - | ≥ 1 | Versión del documento. |
+| `version_of` | STRING | FK | Opcional | `id` de la versión anterior. |
+| `name` | VARCHAR | - | Not Null | Nombre. |
+| `category` | VARCHAR | - | `manual`, `procedure`, `regulation`, `certificate`, `specification`, `other` | Tipo/categoría. |
+| `description` | TEXT | - | Opcional | Descripción. |
+| `responsible_employee_id` | STRING | FK | `employees.employee_id` | Responsable. |
+| `file_name` | VARCHAR | - | Not Null | Nombre del archivo principal. |
+| `mime_type` | VARCHAR | - | Según validación documental existente | Tipo del archivo principal. |
+| `size_bytes` | INT | - | > 0; ≤ 10 MB | Tamaño del archivo principal. |
+| `data_url` | TEXT | - | Not Null | Contenido base64. |
+| `status` | VARCHAR | - | `draft`, `pending_review`, `approved`, `rejected`; legado `archived` | Estado; `under_review` se migra a `pending_review`. |
+| `submitted_by` / `submitted_at` | STRING / TIMESTAMP | - | Opcional | Envío a revisión. |
+| `reviewed_by` / `reviewed_at` | STRING / TIMESTAMP | - | Opcional | Decisión. |
+| `review_justification` | TEXT | - | Obligatorio al rechazar | Motivo. |
+| `created_by` | STRING | - | Opcional | Creador. |
+| `uploaded_at` / `updated_at` | TIMESTAMP | - | ISO 8601 | Marcas de tiempo. |
 
-### 3.5 `non_conformances`
+**Reglas:** el archivo principal usa el límite documental de 10 MB y su validación propia; la evidencia adicional usa PNG/JPG/PDF, 5 MB por archivo y 8 MB acumulados. Un documento aprobado se versiona duplicándolo.
 
-Registra desviaciones o defectos detectados.
+### 4.5 `quality_inspections`
 
-| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+| Campo | Tipo | Clave | Restricción | Descripción |
 |---|---|---|---|---|
-| `non_conformance_id` | STRING | PK | Autogenerado | Identificador único de la no conformidad. |
-| `inspection_id` | STRING | FK | `quality_inspections.inspection_id` | Inspección en la que se detectó. |
-| `product_id` | STRING | FK | `products.product_id` | Producto afectado, tomado del plan. |
-| `description` | TEXT | — | Not Null, no vacío | Descripción de la anomalía; autogenerada y editable. |
-| `defect_type` | VARCHAR | — | `dimensional`, `functional`, `packaging`, `other` | Tipo de defecto; por defecto `other` al autogenerarse. |
-| `severity` | VARCHAR | — | `minor`, `major`, `critical` | Nivel de impacto; por defecto `major` al autogenerarse. |
-| `status` | VARCHAR | — | `open`, `under_review`, `closed` | Estado de resolución; por defecto `open`. |
+| `id` | STRING | PK | Único | Identificador interno. |
+| `inspection_id` | STRING | UK | Único | Identificador de la inspección. |
+| `inspection_plan_id` | STRING | FK | Plan `approved` | Plan aplicado. |
+| `checklist_id` | STRING | FK | Lista `approved` | Lista aplicada. |
+| `checklist_version` | INT | - | ≥ 1 | Versión de la lista usada. |
+| `inspector_id` | STRING | FK | `employees.employee_id` | Inspector ejecutor. |
+| `reference_module` | VARCHAR | Polimórfica | `goods_receipt`, `production_order`, `shipment` | Módulo origen. |
+| `reference_id` | STRING | Polimórfica | Registro existente | Documento origen/lote. |
+| `inspection_date` | DATE | - | Not Null | Fecha de ejecución. |
+| `inspection_status` | VARCHAR | - | `draft`, `pending_review`, `completed` | Estado del flujo; nunca `conditional`. |
+| `proposed_result` | VARCHAR | - | `passed`, `conditional`, `failed`; Null en `draft` | Dictamen calculado al enviar a revisión. |
+| `overall_result` | VARCHAR | - | `passed`, `conditional`, `failed`; Null antes de decisión o en legado sin resultado | Resultado final; `null` se excluye de KPIs. |
+| `review_decision` | VARCHAR | - | `approved`, `approved_conditional`, `rejected`; Null antes de revisión | Decisión del Jefe. `approved → passed`, `approved_conditional → conditional`, `rejected → failed`. |
+| `review_justification` | TEXT | - | Obligatorio si difiere o es condicional/reprobado | Motivo de la revisión. |
+| `reviewed_by` / `reviewed_at` | STRING / TIMESTAMP | - | Obligatorios al decidir | Revisor y fecha. |
+| `submitted_by` / `submitted_at` | STRING / TIMESTAMP | - | Opcional | Envío a revisión. |
+| `override_justification` | TEXT | - | Obligatorio en cambios posteriores | Motivo de cambio manual. |
+| `overridden_by` / `override_at` | STRING / TIMESTAMP | - | Opcional | Autoría y fecha del cambio manual. |
+| `legacy_completed` | BOOLEAN | - | Default `false` | `true` en inspecciones migradas `completed` sin `review_decision`; no determina por sí solo la bandeja. |
+| `createdAt` / `updatedAt` | TIMESTAMP | - | ISO 8601 | Marcas de tiempo. |
 
-### 3.6 `corrective_actions`
+**Reglas:** `pending_review` no cuenta en KPIs ni libera el lote; `rejected` produce `overall_result = failed`; las decisiones `approved` y `approved_conditional` exigen ausencia de críticos fallidos y de mediciones faltantes. Un cambio posterior a `completed` conserva el estado y no genera NC automática.
 
-Define las acciones correctivas o preventivas (CAPA) asociadas a no conformidades.
+### 4.6 `quality_inspection_results`
 
-| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+| Campo | Tipo | Clave | Restricción | Descripción |
 |---|---|---|---|---|
-| `corrective_action_id` | STRING | PK | Autogenerado | Identificador único de la acción. |
-| `non_conformance_id` | STRING | FK | `non_conformances.non_conformance_id` | No conformidad que origina la acción. |
-| `responsible_employee_id` | STRING | FK | `employees.employee_id` | Empleado responsable. |
-| `action_description` | TEXT | — | Not Null | Medida que se debe aplicar. |
-| `root_cause` | TEXT | — | Not Null | Causa raíz identificada. |
-| `action_type` | VARCHAR | — | `resampling`, `rework`, `other` | Tipo de acción a ejecutar. |
-| `due_date` | DATE | — | Not Null | Fecha límite de implementación. |
-| `status` | VARCHAR | — | `pending`, `in_progress`, `completed` | Estado de la acción. |
+| `id` | STRING | PK | Único | Identificador interno. |
+| `result_id` | STRING | UK | Único | Identificador del resultado. |
+| `inspection_id` | STRING | FK | Inspección existente | Inspección asociada. |
+| `criteria_id` | STRING | FK | Criterio existente | Criterio evaluado. |
+| `measured_value` | DECIMAL | - | Numérico | Medición; nunca vacío, `NaN` ni `Infinity`. |
+| `pass_fail` | BOOLEAN | - | Calculado | Cumplimiento; nunca capturado manualmente. |
 
-### 3.7 `quality_evidence`
+### 4.7 `non_conformances`
 
-Almacena los archivos de respaldo adjuntos a inspecciones o no conformidades.
-
-| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+| Campo | Tipo | Clave | Restricción | Descripción |
 |---|---|---|---|---|
-| `evidence_id` | STRING | PK | Autogenerado | Identificador único de la evidencia. |
-| `entity_type` | VARCHAR | Polimórfica | `inspection`, `non_conformance` | Tipo de registro al que se vincula. |
-| `entity_id` | STRING | Polimórfica | ID de la inspección o no conformidad existente | Registro al que pertenece la evidencia. |
-| `file_name` | VARCHAR | — | Not Null | Nombre original del archivo. |
-| `mime_type` | VARCHAR | — | Not Null; `image/png`, `image/jpeg`, `application/pdf` | Tipo de archivo permitido. |
-| `size_bytes` | INT | — | Not Null, > 0 y <= 5242880 | Tamaño del archivo (máximo 5 MB). |
-| `data_url` | TEXT | — | Not Null; data URL base64 | Contenido del archivo para descarga local. |
-| `uploaded_by` | STRING | — | Not Null | Empleado o usuario que adjunta la evidencia. |
-| `uploaded_at` | TIMESTAMP | — | Not Null | Fecha y hora de la carga. |
+| `id` | STRING | PK | Único | Identificador interno. |
+| `non_conformance_id` | STRING | UK | Único | Identificador de la NC. |
+| `inspection_id` | STRING | FK | Opcional en NC manual; obligatoria en NC automática | Inspección de origen. |
+| `reference_module` / `reference_id` | VARCHAR / STRING | Polimórfica | Lote del origen | Trazabilidad. |
+| `product_id` | STRING | FK | `products.product_id` | Producto afectado. |
+| `description` | TEXT | - | No vacío | Descripción; autogenerada y editable en NC automática. |
+| `defect_type` | VARCHAR | - | `dimensional`, `functional`, `packaging`, `other` | Tipo de defecto; inicia en `other`. |
+| `severity` | VARCHAR | - | `minor`, `major`, `critical` | Severidad; inicia en `major`. |
+| `status` | VARCHAR | - | `open`, `under_review`, `closed` | Resolución. |
+| `responsible_employee_id` | STRING | FK | Empleado existente | Responsable. |
+| `created_by` | STRING | - | Opcional | Creador. |
+| `createdAt` / `updatedAt` | TIMESTAMP | - | ISO 8601 | Marcas de tiempo. |
 
-**Restricción acumulada:** la suma de `size_bytes` de toda la colección no debe superar 8 MB; si una carga excede ese límite o la cuota de `localStorage`, se rechaza y se conserva la evidencia existente.
+### 4.8 `corrective_actions`
 
-### 3.8 `quality_alert_rules`
-
-Define umbrales configurables sobre los indicadores del dashboard de calidad.
-
-| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+| Campo | Tipo | Clave | Restricción | Descripción |
 |---|---|---|---|---|
-| `alert_rule_id` | STRING | PK | Autogenerado | Identificador único de la regla. |
-| `metric` | VARCHAR | — | `approval_rate`, `open_non_conformances`, `overdue_capa`, `capa_effectiveness`, `pending_inspections` | Indicador del dashboard que se evalúa. |
-| `operator` | VARCHAR | — | `lt`, `lte`, `gt`, `gte`, `eq` | Operador de comparación del umbral. |
-| `threshold` | DECIMAL | — | Not Null; rango según la métrica | Valor límite de la regla. |
-| `severity` | VARCHAR | — | `info`, `warning`, `critical` | Severidad de la alerta. |
-| `is_active` | BOOLEAN | — | Default `true` | Indica si la regla se evalúa en el dashboard. |
+| `id` | STRING | PK | Único | Identificador interno. |
+| `corrective_action_id` | STRING | UK | Único | Identificador CAPA. |
+| `non_conformance_id` | STRING | FK | NC existente | NC de origen. |
+| `responsible_employee_id` | STRING | FK | Empleado existente | Responsable. |
+| `action_description` | TEXT | - | No vacío | Medida. |
+| `root_cause` | TEXT | - | No vacío | Causa raíz. |
+| `action_category` | VARCHAR | - | `corrective`, `preventive` | Categoría. |
+| `action_type` | VARCHAR | - | `resampling`, `rework`, `other` | Tipo. |
+| `start_date` | DATE | - | YYYY-MM-DD | Inicio. |
+| `due_date` | DATE | - | YYYY-MM-DD | Vencimiento. |
+| `expected_result` | TEXT | - | Opcional | Resultado esperado. |
+| `observations` | TEXT | - | Opcional | Observaciones. |
+| `progress` | INT | - | 0–100 | Avance. |
+| `status` | VARCHAR | - | `pending`, `in_progress`, `completed` | Estado de ejecución; `completed` indica ejecución reportada. |
+| `completed_at` | TIMESTAMP | - | Opcional | Fin de ejecución. |
+| `closure_status` | VARCHAR | - | Null, `pending`, `approved`, `rejected` | Estado de cierre, independiente de `status`. |
+| `closure_requested_at` | TIMESTAMP | - | Opcional | Solicitud de cierre. |
+| `closure_reviewed_by` / `closure_reviewed_at` | STRING / TIMESTAMP | - | Opcional | Revisor y fecha de la decisión de cierre. |
+| `closure_justification` | TEXT | - | Obligatorio al rechazar | Motivo del rechazo de cierre. |
+| `effectiveness_result` | VARCHAR | - | Null, `effective`, `not_effective` | Revisión de eficacia; obligatoria antes de aprobar cierre. |
+| `effectiveness_observations` | TEXT | - | Obligatorio con resultado | Sustento de eficacia. |
+| `effectiveness_reviewed_by` / `effectiveness_reviewed_at` | STRING / TIMESTAMP | - | Opcional | Revisor y fecha de eficacia. |
+| `createdAt` / `updatedAt` | TIMESTAMP | - | ISO 8601 | Marcas de tiempo. |
 
-**Rangos de umbral:** `approval_rate` y `capa_effectiveness` admiten 0–100; `open_non_conformances`, `overdue_capa` y `pending_inspections` admiten valores ≥ 0.
+**Reglas:** solo el Jefe aprueba o rechaza el cierre; el rechazo fija `closure_status = rejected` y `status = in_progress`; la eficacia se registra en una revisión separada; una CAPA con cierre aprobado no se considera vencida; una NC puede cerrarse sin CAPA aprobada.
 
-### 3.9 `quality_audit_log`
+### 4.9 `quality_evidence`
 
-Bitácora inmutable de altas, ediciones, cambios de estado y eliminaciones sobre inspecciones, no conformidades y acciones CAPA.
-
-| Columna | Tipo | Clave | Referencia / Restricción | Descripción |
+| Campo | Tipo | Clave | Restricción | Descripción |
 |---|---|---|---|---|
-| `id` | STRING | PK | Autogenerado | Identificador de la entrada de auditoría. |
-| `entity_type` | VARCHAR | — | `inspection`, `non_conformance`, `corrective_action` | Tipo de entidad auditada. |
-| `entity_id` | STRING | — | Not Null | Identificador de la entidad, conservado tras la eliminación. |
-| `reference_module` | VARCHAR | — | Not Null | Módulo origen del lote. |
-| `reference_id` | STRING | — | Not Null | Documento origen; permite filtrar aunque la entidad ya no exista. |
-| `action` | VARCHAR | — | `create`, `update`, `status_change`, `delete` | Operación registrada. |
-| `changed_field` | VARCHAR | — | Not Null | Campo modificado. |
-| `before_value` | JSON | — | `null` en `create` | Valor anterior. |
-| `after_value` | JSON | — | `null` en `delete` | Valor nuevo. |
-| `actor` | STRING | — | Not Null | Empleado de la operación; en su defecto el rol activo como metadato. |
-| `timestamp` | TIMESTAMP | — | Not Null; ISO 8601 | Fecha y hora del cambio. |
-| `justification` | TEXT | — | Opcional | Motivo del cambio de dictamen cuando aplica. |
+| `id` | STRING | PK | Único | Identificador interno. |
+| `evidence_id` | STRING | UK | Único | Identificador de evidencia. |
+| `entity_type` | VARCHAR | Polimórfica | `inspection`, `non_conformance`, `corrective_action`, `document` | Entidad vinculada. |
+| `entity_id` | STRING | Polimórfica | Registro existente | ID de la entidad. |
+| `file_name` | VARCHAR | - | Not Null | Nombre original. |
+| `mime_type` | VARCHAR | - | `image/png`, `image/jpeg`, `application/pdf` | Tipo permitido. |
+| `size_bytes` | INT | - | > 0; ≤ 5 MB | Tamaño por archivo. |
+| `data_url` | TEXT | - | Not Null | Contenido base64. |
+| `uploaded_by` | STRING | - | Not Null | Autor: empleado o rol como metadato. |
+| `uploaded_at` | TIMESTAMP | - | Not Null | Fecha. |
 
-**Regla de conservación:** las entradas `delete` persisten tras eliminaciones permitidas, incluida la eliminación directa de CAPA y las cascadas de FR-026. El cambio de dictamen emite una sola entrada `status_change` sobre `overall_result`, sin duplicarla como `update` genérico.
+**Restricción acumulada:** toda la colección no supera 8 MB; una carga que exceda el límite o la cuota de `localStorage` se rechaza conservando la evidencia previa. El archivo principal de un documento no usa esta cuota de evidencia y conserva su límite de 10 MB.
 
-## 4. Integración con otros módulos
+### 4.10 `quality_alert_rules`
 
-| Dato de Control de Calidad | Módulo de destino | Propósito |
-|---|---|---|
-| `quality_inspection_plans.product_id` | Logística: `products.product_id` | Asociar planes de inspección al catálogo de productos. |
-| `quality_inspections.inspector_id` | Recursos Humanos: `employees.employee_id` | Identificar al inspector responsable. |
-| `quality_inspections.reference_module` + `reference_id` | Compras, Manufactura o Despachos | Mantener trazabilidad con recepciones, órdenes de producción y despachos. |
-| `non_conformances.product_id` | Logística: `products.product_id` | Identificar el producto afectado. |
-| `corrective_actions.responsible_employee_id` | Recursos Humanos: `employees.employee_id` | Asignar la ejecución de la acción CAPA. |
+| Campo | Tipo | Clave | Restricción | Descripción |
+|---|---|---|---|---|
+| `id` | STRING | PK | Único | Identificador interno. |
+| `alert_rule_id` | STRING | UK | Único | Identificador de la regla. |
+| `metric` | VARCHAR | - | `approval_rate`, `open_non_conformances`, `overdue_capa`, `capa_effectiveness`, `pending_inspections` | Indicador. |
+| `operator` | VARCHAR | - | `lt`, `lte`, `gt`, `gte`, `eq` | Operador. |
+| `threshold` | DECIMAL | - | Rango según métrica | Umbral. |
+| `severity` | VARCHAR | - | `info`, `warning`, `critical` | Severidad. |
+| `is_active` | BOOLEAN | - | Default `true` | Activa. |
 
-### Consideraciones de integración
+**Rangos:** tasas 0–100; conteos ≥ 0. No se permite más de una regla activa por `metric` + `operator`. Las alertas son informativas, no bloquean ni generan NC.
 
-- El [modelo de datos del módulo base](../001-erp-base-module/data-model.md) define `Entity` y `Document`, pero no define las tablas `products`, `employees`, `goods_receipts`, `production_orders` ni `shipments`. Esas referencias dependen de los módulos correspondientes y no deben considerarse implementadas por este documento.
-- El MVP usa identificadores `string` y `localStorage`. El modelo relacional con `INT` se conserva como diseño lógico; cualquier implementación relacional requiere una capa de mapeo explícita.
-- El campo polimórfico `reference_id` no puede garantizar por sí solo la existencia del registro de origen mediante una clave foránea relacional. La integración debe validar el par `reference_module` y `reference_id`.
-- La implementación de este modelo requiere integrar las dependencias externas; documentar las relaciones no agrega esas entidades ni cambia el código de la aplicación.
+### 4.11 `quality_audit_log`
 
-## 5. Reglas de negocio e integridad
+| Campo | Tipo | Clave | Restricción | Descripción |
+|---|---|---|---|---|
+| `id` | STRING | PK | Único | Identificador. |
+| `entity_type` | VARCHAR | - | `inspection_plan`, `checklist`, `document`, `inspection`, `non_conformance`, `corrective_action` | Entidad auditada. |
+| `entity_id` | STRING | - | Not Null | ID conservado tras eliminación. |
+| `reference_module` | VARCHAR | - | Null si no aplica | Módulo del lote; permite filtrar tras borrar el registro. |
+| `reference_id` | STRING | - | Null si no aplica | Documento origen. |
+| `action` | VARCHAR | - | `create`, `update`, `review`, `approve`, `reject`, `status_change`, `delete` | Acción. |
+| `changed_field` | VARCHAR | - | Not Null | Campo o estado modificado. |
+| `before_value` | JSON | - | `null` en `create` | Valor anterior. |
+| `after_value` | JSON | - | `null` en `delete` | Valor nuevo; en decisiones incluye decisión, resultado, revisor y fecha. |
+| `actor` | STRING | - | Not Null | Empleado seleccionado; solo si no existe, rol activo como metadato. |
+| `timestamp` | TIMESTAMP | - | ISO 8601 | Fecha. |
+| `justification` | TEXT | - | Opcional u obligatoria según decisión | Motivo. |
 
-- **Habilitación de planes:** un plan sin al menos un criterio no se habilita para iniciar inspecciones.
-- **Evaluación:** `pass_fail` se calcula según `comparison_type`:
-  - `range`: `expected_value - tolerance <= measured_value <= expected_value + tolerance`.
-  - `min`: `measured_value >= expected_value`.
-  - `max`: `measured_value <= expected_value`.
-  - `boolean`: `measured_value` coincide con `expected_value` (1 = cumple, 0 = no cumple).
-- **Inspección incompleta:** si falta la medición de cualquier criterio o el valor no es numérico, la inspección permanece `draft` y no tiene `overall_result`.
-- **Dictamen:** con la inspección completa, `failed` si falla al menos un criterio crítico, `conditional` si solo hay desviaciones no críticas y `passed` si todos cumplen.
-- **Cambio manual:** el Jefe de Calidad puede cambiar `overall_result` solo con `override_justification`, `overridden_by` y `override_at`; nunca puede establecer `passed` si existe un criterio crítico fallido o sin medición.
-- **Revisión condicional:** `conditional` se muestra en la bandeja de revisión y no genera no conformidad automática.
-- **No conformidad automática:** una inspección `failed` genera un borrador `open` con tipo de defecto `other`, severidad `major`, producto del plan y descripción autogenerada de los criterios incumplidos.
-- **CAPA vencida:** una acción con `due_date` anterior a la fecha actual y `status != completed` se marca como vencida sin cambiar su estado.
-- **Bloqueo histórico:** un plan o criterio con resultados de inspección asociados tiene `is_locked = true` y no puede editarse ni eliminarse; el plan se duplica para crear una nueva versión.
-- **Eliminación:** plan sin inspecciones elimina sus criterios en cascada; inspección sin no conformidad elimina sus resultados y su evidencia en cascada; inspección con no conformidad no se elimina; no conformidad elimina sus CAPA y su evidencia en cascada.
-- **Lotes pendientes:** se derivan de los documentos origen externos que no tienen una inspección `completed`; una inspección `draft` no marca el lote como inspeccionado.
-- **Cuarentena:** un lote con al menos una no conformidad en estado `open` o `under_review` se muestra como retenido/en cuarentena; si tiene una CAPA asociada se muestra "Cuarentena - En tratamiento".
-- **Exportación:** es una vista derivada de los datos consultados. El historial en CSV UTF-8 incluye una columna `resultados` con `criterio:medido:cumple` separado por `;`, respeta los filtros activos y el resumen usa los mismos KPIs del dashboard; no se persiste una entidad de exportación.
-- **Evidencia:** un archivo se vincula a una inspección o no conformidad existente mediante `entity_type` + `entity_id`; se aceptan solo PNG/JPG/PDF de hasta 5 MB por archivo, con un máximo acumulado de 8 MB y manejo de cuota, y se rechazan tipos no permitidos, contenido vacío y vínculos a registros inexistentes.
-- **Alertas:** una regla activa se evalúa contra el KPI indicado al abrir o actualizar el dashboard; se validan indicadores, operadores, severidades y rangos (0–100 en tasas, ≥ 0 en conteos), y no se permite más de una regla activa por `metric` + `operator`.
-- **Desactivación de alertas:** una regla desactivada (`is_active = false`) o eliminada deja de mostrar su alerta; si se elimina, se retira del almacenamiento sin afectar otras reglas.
-- **Cascada de evidencia:** la evidencia se elimina en cascada con su inspección (sin no conformidad) o con su no conformidad; si la inspección tiene no conformidad, su eliminación se bloquea y la evidencia permanece. Las alertas son informativas y no generan no conformidades ni bloqueos.
+**Conservación:** las entradas permanecen tras eliminaciones permitidas y cascadas. Una decisión final de inspección emite una sola entrada `approve`/`reject` sobre `overall_result`; no se duplica como `update` ni como `status_change` por pasar a `completed`. Un permiso denegado no genera entrada.
 
-## 6. Trazabilidad de no conformidades y CAPA
+## 5. Máquinas de estado
 
-Los resultados de inspección permiten identificar criterios incumplidos. Una inspección puede originar no conformidades, y cada no conformidad puede tener acciones correctivas o preventivas con responsable, causa raíz, tipo de acción, fecha límite y estado. Este encadenamiento conserva la trazabilidad desde la medición hasta la resolución.
+### 5.1 Planes y listas
+
+`draft → pending_approval → approved | rejected`
+
+- `rejected → draft` al editar, conservando la justificación.
+- `approved` no se edita en la misma versión; se duplica.
+- `pending_approval` exige al menos un criterio y campos obligatorios.
+- La aprobación registra revisor y fecha; el rechazo exige justificación.
+- Las decisiones usan `status`, no `review_decision`.
+
+### 5.2 Documentos
+
+`draft → pending_review → approved | rejected`
+
+- `under_review` es legado equivalente a `pending_review`; `archived` queda fuera del flujo.
+- `rejected → draft` al editar; `approved` se versiona duplicándolo.
+- La aprobación exige archivo/metadatos previsualizables.
+- El rechazo exige justificación.
+
+### 5.3 Inspecciones
+
+Flujo normal: `draft → pending_review → completed`.
+
+- `draft`: mediciones editables; `proposed_result = null`; sin `overall_result` ni `review_decision`.
+- `pending_review`: bloqueada para el Inspector; no cuenta en KPIs; no libera el lote; ya tiene `proposed_result`.
+- `completed`: dictamen final derivado de `review_decision`; la decisión se registra antes o en la misma operación que fija el estado.
+- Mapeo: `approved → passed`, `approved_conditional → conditional`, `rejected → failed`.
+- `approved` y `approved_conditional` exigen ausencia de críticos fallidos y de mediciones faltantes.
+- Caso heredado/excepción: `completed` con `proposed_result = conditional` y `review_decision = null` permanece en la bandeja, conserva `inspection_status = completed` y sale al registrar cualquier decisión. Nunca retrocede a `pending_review`.
+- Un registro `completed` con `review_decision = null` y resultado distinto de `conditional` es final: no va a bandeja y cuenta por su `overall_result` conservado.
+- `overall_result = null` se excluye de KPIs; no se le asigna un resultado inventado.
+- `conditional` es resultado, nunca estado de inspección.
+
+### 5.4 CAPA
+
+Ejecución: `pending → in_progress → completed`.
+
+Cierre: `pending → approved | rejected`.
+
+- Al marcar `status = completed` se registra `completed_at` y se deja `closure_status = pending`.
+- Solo el Jefe aprueba o rechaza el cierre.
+- La aprobación exige `effectiveness_result` y observaciones registradas previamente.
+- El rechazo fija `closure_status = rejected` y `status = in_progress`, con justificación.
+- `completed` no implica cierre aprobado; una NC puede cerrarse sin CAPA aprobada.
+- La cuarentena se deriva de NC en `open` o `under_review`.
+
+## 6. Versionado
+
+- `version_group_id` identifica la familia; `version` es consecutivo; `version_of` apunta a la versión anterior.
+- La primera versión usa `version = 1`, `version_group_id = id`, `version_of = null`.
+- Una nueva versión nace en `draft`, reutiliza el código de negocio cuando exista (`document_id`) y conserva la versión aprobada anterior.
+- Editar un borrador no incrementa `version`.
+- Editar un aprobado está bloqueado; la UI ofrece "Crear nueva versión".
+- Las inspecciones conservan `inspection_plan_id` y `checklist_id` de la versión exacta usada.
+
+## 7. Migración de datos legados
+
+La migración se ejecuta antes de renderizar cualquier bandeja o vista dependiente de estados migrados; es idempotente, no elimina registros y reporta solo cambios efectivos.
+
+| Entidad | Regla |
+|---|---|
+| Planes sin `status` | `approved`; `version = 1`; `version_group_id = id`. |
+| Listas `active` | `approved`. |
+| Listas `draft` | `draft`. |
+| Listas `archived` | Se conserva `archived` como legado no seleccionable. |
+| Documentos `active` | `approved`. |
+| Documentos `under_review` | `pending_review`. |
+| Documentos `archived` | Se conserva `archived` como legado no seleccionable. |
+| Documentos sin `version_group_id` | `version_group_id = id`; `version_of = null`. |
+| Inspecciones `completed` con `review_decision = null` | `legacy_completed = true`; conservar `overall_result`. Si `proposed_result = conditional` —o falta y `overall_result = conditional`, caso en que se completa— permanece en bandeja sin cambiar `inspection_status`. Si el resultado es distinto de `conditional`, es final, sin bandeja y cuenta por `overall_result`. Si `overall_result = null`, se excluye de KPIs y no se inventa un resultado. |
+| Inspecciones `completed` con `review_decision` | No se marcan como pendientes; no van a bandeja; cuentan por `overall_result`. |
+| Inspecciones sin `proposed_result` | Se completa con `overall_result` solo si existe; en caso contrario queda `null`. |
+| CAPA `completed` sin `closure_status` | `closure_status = pending`; `closure_requested_at = completed_at || updatedAt`. |
+| CAPA sin `effectiveness_result` | `null`; no se aprueba cierre sin revisión de eficacia. |
+| Evidencia | Se conserva; se valida `entity_type` ampliado. |
+| Auditoría | Se conserva; se normalizan entidades/acciones desconocidas sin borrar entradas. |
+
+La marca `legacy_completed` identifica origen migrado, pero la bandeja se determina por `proposed_result = conditional` y `review_decision = null`, no por la marca aislada.
+
+## 8. Reglas de integridad
+
+- **Planes/listas/documentos:** solo versiones `approved` se seleccionan; un plan sin criterios no inicia inspección.
+- **Evaluación:** `range` inclusivo, `min`, `max`, `boolean`; `pass_fail` calculado, nunca capturado.
+- **Resultado propuesto:** `failed` si falla un criterio crítico; `conditional` si solo fallan no críticos; `passed` si todo cumple; `overall_result` sigue `null`.
+- **Revisión:** `approved` y `approved_conditional` no se permiten con críticos fallidos o mediciones faltantes.
+- **NC automática:** solo cuando `review_decision = rejected` (`overall_result = failed`) desde `pending_review` o desde el caso heredado condicional sin decisión, y no existe NC previa.
+- **Sin NC automática:** overrides, cambios manuales posteriores, creación manual y la guarda de críticos fallidos o sin medición.
+- **CAPA:** no se aprueba cierre sin eficacia; el rechazo de cierre fija `closure_status = rejected` y `status = in_progress`.
+- **Cuarentena:** lote con NC `open`/`under_review`; "Cuarentena - En tratamiento" si la NC tiene al menos una CAPA; sale cuando esas NC pasan a `closed`.
+- **Lotes pendientes:** documentos origen sin inspección `completed`; `draft` y `pending_review` no liberan; el legado condicional sin decisión tampoco libera por estar en bandeja.
+- **Vencimiento CAPA:** `due_date < hoy` y `closure_status != approved`.
+- **Eliminación:** plan sin inspecciones elimina criterios; inspección con NC no se elimina; NC elimina CAPA y evidencia; CAPA/documento eliminan su evidencia; aprobados con historial no se eliminan.
+- **Evidencia:** PNG/JPG/PDF; 5 MB por archivo; 8 MB acumulados o cuota; vínculo válido; documento principal hasta 10 MB.
+- **Alertas:** informativas; no bloquean ni generan NC.
+- **Exportación:** vista derivada; no se persiste.
+
+## 9. Mapa de auditoría
+
+| Operación | `action` | `changed_field` | `before_value` | `after_value` |
+|---|---|---|---|---|
+| Alta | `create` | Estado inicial correspondiente | `null` | Estado inicial, por ejemplo `{ status: 'draft' }` o `{ inspection_status: 'draft' }`. |
+| Edición de borrador | `update` | Campo modificado | Valor anterior | Valor nuevo. |
+| Envío a revisión/aprobación | `status_change` | `status` o `inspection_status` | Estado anterior | Estado nuevo. |
+| Nota de revisión sin decisión | `review` | `review_justification` | Anterior | Nueva. |
+| Decisión final de inspección | `approve` o `reject` | `overall_result` | Resultado anterior | `{ overall_result, review_decision, reviewed_by, reviewed_at }` más justificación cuando corresponda. |
+| Decisión de plan, lista o documento | `approve` o `reject` | `status` | Estado anterior | `{ status, reviewed_by, reviewed_at, review_justification }`. |
+| Decisión de cierre CAPA | `approve` o `reject` | `closure_status` | Cierre anterior | `{ closure_status, status, closure_reviewed_by, closure_reviewed_at, closure_justification, effectiveness_result }`. |
+| Revisión de eficacia CAPA | `review` | `effectiveness_result` | Anterior | `{ effectiveness_result, effectiveness_observations, effectiveness_reviewed_by, effectiveness_reviewed_at }`. |
+| Override de inspección | `status_change` | `overall_result` | Resultado anterior | `{ overall_result, overridden_by, override_at, override_justification }`. |
+| Cambio operativo | `status_change` | Campo de estado | Anterior | Nuevo. |
+| Eliminación permitida | `delete` | Estado o campo aplicable | Último valor | `null`. |
+
+**Reglas de no duplicación:** la decisión final de inspección emite una sola entrada `approve`/`reject`; el cambio de `inspection_status` a `completed` no se audita por separado. El override emite una sola `status_change` sobre `overall_result`. La revisión de eficacia CAPA es una entrada `review` distinta de la decisión de cierre. El rechazo de cierre no genera una segunda `status_change` por volver a `in_progress`; ambos valores viajan en la misma entrada `reject`. Una acción denegada por permisos no registra auditoría.
+
+## 10. Métricas y vistas derivadas
+
+- `approvalRate(inspections, stage?)`: `count(inspection_status = completed AND overall_result = passed) / count(inspection_status = completed AND overall_result IN (passed, conditional, failed))`, con 0 si el denominador es 0. `conditional` cuenta en el denominador y no en el numerador. `draft`, `pending_review` y `overall_result = null` no participan.
+- `pendingInspections(inspections)`: cantidad de registros con `inspection_status = draft` o `pending_review`. Excluye el legado `completed` condicional sin decisión; ese caso solo aparece en la bandeja.
+- `reviewQueue(inspections)`: `pending_review` más `completed` con `proposed_result = conditional` y `review_decision = null`. Sale cualquier registro en cuanto existe `review_decision`.
+- `derivedDashboard(...)`: calcula indicadores, conteos, gráficos, actividad reciente y accesos rápidos desde colecciones existentes; no almacena cifras ni crea entidades.
+- `quarantine(...)`: lotes con NC `open`/`under_review`; no se persiste como entidad.
+- `capaEffectiveness(actions)`: cierres aprobados con `effectiveness_result = effective` sobre cierres aprobados; 0 si no hay cierres aprobados.
+
+## 11. Capa visual derivada
+
+US15 no introduce entidades. Las 15 pantallas —dashboard, lotes pendientes, planes y criterios, listas de verificación, documentos, ejecución de inspección, revisión de inspecciones, aprobaciones pendientes, no conformidades, CAPA, cuarentena, historial, bitácora, exportación y alertas— se renderizan desde los datos anteriores.
+
+El menú de cinco categorías y 12 entradas con IDs exactos, la matriz del dashboard, los tokens visuales, las columnas clave, la búsqueda sobre el conjunto ya filtrado, los estados vacíos, la carga, el foco y el contraste AA son requisitos de presentación y verificación. No requieren campos nuevos; las etiquetas "Borrador", "Pendiente", "Aprobado", "Rechazado", "Vencido" y las etiquetas secundarias de resultado "Aprobado", "Condicional", "Reprobado" se derivan de estado/resultado. En particular, `approved_conditional` muestra el estado "Aprobado" y el resultado "Condicional".

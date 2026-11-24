@@ -43,61 +43,85 @@
           </button>
 
           <div class="nav-divider" role="presentation"></div>
-          <span class="nav-group-label">Control de Calidad</span>
+          <span class="nav-group-label quality-category">GENERAL</span>
 
-          <button type="button" class="nav-quality active" data-quality="quality-dashboard" id="nav-quality-dashboard" aria-current="page">
+          <button type="button" class="nav-quality active" data-quality="quality-dashboard" id="quality-dashboard" aria-current="page">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15V5"></path><path d="M3 15h14"></path><path d="M6 15v-4"></path><path d="M10 15V7"></path><path d="M14 15v-6"></path></svg>
-            <span class="nav-label">Dashboard</span>
+            <span class="nav-label"><span id="nav-quality-dashboard">Inicio / Dashboard</span></span>
           </button>
-          <button type="button" class="nav-quality" data-quality="pending-lots" id="nav-quality-lots">
-            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="14" height="13" rx="2"></rect><path d="M6 8h8"></path><path d="M6 11h8"></path><path d="M6 14h5"></path></svg>
-            <span class="nav-label">Lotes pendientes</span>
+          <button type="button" class="nav-quality" data-quality="quality-search" id="quality-search">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="5"></circle><path d="m12.8 12.8 4.2 4.2"></path></svg>
+            <span class="nav-label"><span id="nav-quality-search">Búsqueda</span></span>
           </button>
-          <button type="button" class="nav-quality" data-quality="quality-plans" id="nav-quality-plans">
+          <button type="button" class="nav-quality" data-quality="quality-entities" id="quality-entities">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.5 3.5 6v8L10 17.5 16.5 14V6L10 2.5z"></path><path d="M3.5 6 10 9.5 16.5 6"></path><path d="M10 9.5v8"></path></svg>
+            <span class="nav-label"><span id="nav-quality-entities">Entidades</span></span>
+          </button>
+
+          <span class="nav-group-label quality-category">GESTIÓN DE CALIDAD</span>
+
+          <button type="button" class="nav-quality" data-quality="quality-plans" id="quality-plans">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h10v14H5z"></path><path d="M8 7h4"></path><path d="M8 10h4"></path><path d="M8 13h2"></path></svg>
-            <span class="nav-label">Planes</span>
+            <span class="nav-label"><span id="nav-quality-plans">Planes de calidad</span></span>
           </button>
-          <button type="button" class="nav-quality" data-quality="quality-checklists" id="nav-quality-checklists">
+          <button type="button" class="nav-quality" data-quality="quality-checklists" id="quality-checklists">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 4h7a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 15.5 16h-7A1.5 1.5 0 0 1 7 14.5v-9A1.5 1.5 0 0 1 8.5 4z"></path><path d="M4.5 6.5 3 8l1.5 1.5"></path><path d="M4.5 11 3 12.5 4.5 14"></path><path d="M10 8h4"></path><path d="M10 11h4"></path></svg>
-            <span class="nav-label">Listas de verificación</span>
+            <span class="nav-label"><span id="nav-quality-checklists">Listas de verificación</span></span>
           </button>
-          <button type="button" class="nav-quality" data-quality="inspections" id="nav-quality-inspections">
+          <button type="button" class="nav-quality" data-quality="quality-inspections" id="quality-inspections">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle><path d="m6.5 10 2.5 2.5 4.5-5"></path></svg>
-            <span class="nav-label">Inspecciones</span>
+            <span class="nav-label"><span id="nav-quality-inspections">Inspecciones</span></span>
           </button>
-          <button type="button" class="nav-quality" data-quality="non-conformance" id="nav-quality-nc">
+          <button type="button" class="nav-quality" data-quality="quality-non-conformances" id="quality-non-conformances">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2.5 18 17H2z"></path><path d="M10 8v3.5"></path><path d="M10 14.2v.1"></path></svg>
-            <span class="nav-label">No conformidades</span>
+            <span class="nav-label"><span id="nav-quality-nc">No conformidades</span></span>
           </button>
-          <button type="button" class="nav-quality" data-quality="corrective-actions" id="nav-quality-capa">
+          <button type="button" class="nav-quality" data-quality="quality-capa" id="quality-capa">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10a6 6 0 0 1 10.2-4.2L17 8"></path><path d="M17 3v5h-5"></path><path d="M16 10a6 6 0 0 1-10.2 4.2L3 12"></path><path d="M3 17v-5h5"></path></svg>
-            <span class="nav-label">Acciones CAPA</span>
+            <span class="nav-label"><span id="nav-quality-capa">Acciones CAPA</span></span>
           </button>
-          <button type="button" class="nav-quality" data-quality="quality-documents" id="nav-quality-documents">
+          <button type="button" class="nav-quality" data-quality="quality-approvals" id="quality-approvals">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h12v12H4z"></path><path d="m7 10 2 2 4-4"></path></svg>
+            <span class="nav-label"><span id="nav-quality-approvals">Aprobaciones pendientes</span></span>
+          </button>
+
+          <span class="nav-group-label quality-category">DOCUMENTACIÓN</span>
+
+          <button type="button" class="nav-quality" data-quality="quality-documents" id="quality-documents">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 2.5h6l4 4v11H5z"></path><path d="M11 2.5v4h4"></path><path d="M8 11h4"></path><path d="M8 14h4"></path></svg>
-            <span class="nav-label">Documentación</span>
+            <span class="nav-label"><span id="nav-quality-documents">Documentos</span></span>
           </button>
-          <button type="button" class="nav-quality" data-quality="quality-reports" id="nav-quality-reports">
+
+          <span class="nav-group-label quality-category">ANÁLISIS</span>
+
+          <button type="button" class="nav-quality" data-quality="quality-reports" id="quality-reports">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17h14"></path><path d="M5 14V8"></path><path d="M10 14V4"></path><path d="M15 14v-4"></path></svg>
-            <span class="nav-label">Reportes</span>
+            <span class="nav-label"><span id="nav-quality-reports">Reportes</span></span>
           </button>
-          <button type="button" class="nav-quality" data-quality="quality-settings" id="nav-quality-settings">
+
+          <span class="nav-group-label quality-category">ADMINISTRACIÓN</span>
+
+          <button type="button" class="nav-quality" data-quality="quality-settings" id="quality-settings">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="2.5"></circle><path d="M10 2v2"></path><path d="M10 16v2"></path><path d="M2 10h2"></path><path d="M16 10h2"></path><path d="m4.3 4.3 1.4 1.4"></path><path d="m14.3 14.3 1.4 1.4"></path><path d="m15.7 4.3-1.4 1.4"></path><path d="m5.7 14.3-1.4 1.4"></path></svg>
-            <span class="nav-label">Configuración</span>
+            <span class="nav-label"><span id="nav-quality-settings">Configuración</span></span>
           </button>
-          <button type="button" class="nav-quality" data-quality="quality-history" id="nav-quality-history">
-            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle><path d="M10 6v4l2.5 2"></path></svg>
-            <span class="nav-label">Historial</span>
+
+          <div class="nav-divider" role="presentation"></div>
+          <span class="nav-group-label">Accesos relacionados</span>
+          <button type="button" class="nav-related" data-related-quality="pending-lots" id="nav-quality-lots">
+            <span class="nav-label"><span id="nav-quality-lots-label">Lotes pendientes</span></span>
           </button>
-          <button type="button" class="nav-quality" data-quality="quality-audit-log" id="nav-quality-audit">
-            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h10v14H5z"></path><path d="M8 7h4"></path><path d="M8 10h4"></path><path d="M8 13h2"></path><path d="m3 6 1.5 1L7 4.5"></path></svg>
-            <span class="nav-label">Bitácora</span>
+          <button type="button" class="nav-related" data-related-quality="quality-history" id="nav-quality-history">
+            <span class="nav-label"><span id="nav-quality-history-label">Historial</span></span>
+          </button>
+          <button type="button" class="nav-related" data-related-quality="quality-audit-log" id="nav-quality-audit">
+            <span class="nav-label"><span id="nav-quality-audit-label">Bitácora</span></span>
           </button>
         </nav>
       </aside>
 
       <main class="content" id="app">
-        <section id="view-dashboard" aria-labelledby="dashboard-heading">
+        <section id="view-dashboard" data-quality-view="dashboard" aria-labelledby="dashboard-heading">
           <h1 id="dashboard-heading">Módulo Base ERP</h1>
           <p id="dashboard-subtitle" class="muted">Gestiona tus entidades y documentos en un solo lugar.</p>
 
@@ -129,10 +153,20 @@
           </div>
         </section>
 
-        <section id="view-entities" aria-labelledby="entities-view-heading" hidden>
+        <section id="view-entities" data-quality-view="quality-entities" aria-labelledby="entities-view-heading" hidden>
           <h1 id="entities-view-heading">Entidades</h1>
+          <p class="muted" id="entities-purpose">Consulta de maestros referenciados por el módulo de calidad.</p>
 
-          <section class="card" aria-labelledby="entity-form-heading">
+          <section class="card" id="quality-entities-readonly" aria-labelledby="quality-entities-heading" hidden>
+            <div class="card-head">
+              <h2 id="quality-entities-heading">Maestros referenciados</h2>
+              <input id="quality-entity-search" class="table-search" type="search" placeholder="Buscar entidad, producto o empleado" aria-label="Buscar maestros referenciados" />
+              <button type="button" id="quality-entity-refresh" class="primary">Actualizar maestros</button>
+            </div>
+            <div id="quality-entity-list" class="empty">Cargando maestros referenciados…</div>
+          </section>
+
+          <section class="card entity-write" aria-labelledby="entity-form-heading">
             <h2 id="entity-form-heading">Agregar / Editar Entidad</h2>
             <form id="entity-form">
               <input type="hidden" id="entity-id" />
@@ -193,7 +227,7 @@
             </form>
           </section>
 
-          <section class="card" aria-labelledby="edit-entity-heading">
+          <section class="card entity-write" aria-labelledby="edit-entity-heading">
             <h2 id="edit-entity-heading">Editar o eliminar la entidad</h2>
             <div>
               <label for="edit-entity">Selecciona una entidad</label>
@@ -299,12 +333,16 @@
           </section>
         </section>
 
-        <section id="view-search" aria-labelledby="search-view-heading" hidden>
+        <section id="view-search" data-quality-view="quality-search" aria-labelledby="search-view-heading" hidden>
           <h1 id="search-view-heading">Buscar Entidades</h1>
+          <p class="muted" id="search-purpose">Busca coincidencias en el conjunto ya cargado y filtrado de la vista activa.</p>
 
           <section class="card" aria-labelledby="search-heading">
             <h2 id="search-heading">Buscar una entidad</h2>
             <input id="search-input" name="search-input" placeholder="Buscar por nombre, código, categoría..." aria-label="Buscar entidades" />
+            <div class="form-actions">
+              <button type="button" id="search-submit" class="primary">Buscar</button>
+            </div>
           </section>
 
           <section class="card" aria-labelledby="results-heading">
@@ -318,7 +356,7 @@
              Control de Calidad
              ================================================================== -->
 
-        <section id="view-quality-dashboard" class="view quality-shell" aria-labelledby="quality-dashboard-heading" hidden>
+        <section id="view-quality-dashboard" class="view quality-shell" data-quality-view="quality-dashboard" aria-labelledby="quality-dashboard-heading" hidden>
           <div class="page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 19v-5"></path><path d="M13 19V8"></path><path d="M18 19v-8"></path></svg>
@@ -327,6 +365,8 @@
               <span class="page-eyebrow">ERP / Control de Calidad</span>
               <h1 id="quality-dashboard-heading">Dashboard de Calidad</h1>
               <p class="muted">Indicadores agregados de inspecciones, no conformidades y acciones CAPA.</p>
+              <p class="muted" id="quality-welcome">Bienvenido. Consulta el estado del sistema de calidad con el rol activo.</p>
+              <span class="quality-role-chip" id="quality-active-role">Jefe de Calidad</span>
             </div>
           </div>
 
@@ -342,7 +382,8 @@
             </div>
           </div>
           <div class="form-actions">
-            <button type="button" id="dashboard-export" class="secondary">Exportar KPIs (CSV)</button>
+            <button type="button" id="quality-review-open" class="primary" data-permission="view_approval_queues">Revisar aprobaciones</button>
+            <button type="button" id="dashboard-export" class="secondary" data-permission="export_reports">Exportar KPIs (CSV)</button>
           </div>
           <div class="error" id="dashboard-export-error" aria-live="polite"></div>
           </div>
@@ -376,9 +417,57 @@
               <span class="kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M8 10h8"></path><path d="M8 14h5"></path></svg></span>
               <span class="stat-value" id="kpi-pending-inspections">0</span>
               <span class="stat-label">Inspecciones pendientes</span>
-              <span class="kpi-hint">Borradores sin dictamen</span>
+              <span class="kpi-hint">Borradores y revisión</span>
+            </div>
+            <div class="stat-card kpi-final" data-source="quality_inspections.overall_result">
+              <span class="stat-value" id="kpi-final-inspections">0</span>
+              <span class="stat-label">Dictámenes finales</span>
+              <span class="kpi-hint"> Resultado final registrado</span>
+            </div>
+            <div class="stat-card kpi-capa-pending" data-source="corrective_actions.closure_status">
+              <span class="stat-value" id="kpi-pending-capa">0</span>
+              <span class="stat-label">Cierres CAPA pendientes</span>
+              <span class="kpi-hint">Con cierre solicitado</span>
+            </div>
+            <div class="stat-card kpi-documents" data-source="quality_documents.status">
+              <span class="stat-value" id="kpi-pending-documents">0</span>
+              <span class="stat-label">Documentos pendientes</span>
+              <span class="kpi-hint">En revisión</span>
             </div>
           </div>
+
+          <section class="card" aria-labelledby="quality-status-heading">
+            <h2 id="quality-status-heading">Leyenda de estados</h2>
+            <div id="quality-status-legend" aria-label="Leyenda de estados"></div>
+          </section>
+
+          <section class="card" aria-labelledby="quality-operations-heading">
+            <h2 id="quality-operations-heading">Operación pendiente</h2>
+            <div class="quality-summary-grid">
+              <button type="button" id="quality-summary-approvals" class="quality-summary-item" data-permission="view_approval_queues" data-quality-target="quality-approvals">
+                <strong>Aprobaciones pendientes</strong><span id="quality-summary-approvals-value">0</span>
+              </button>
+              <button type="button" id="quality-summary-inspections" class="quality-summary-item" data-quality-target="quality-inspections">
+                <strong>Inspecciones por revisar</strong><span id="quality-summary-inspections-value">0</span>
+              </button>
+              <button type="button" id="quality-summary-capa" class="quality-summary-item" data-quality-target="quality-capa">
+                <strong>CAPA pendientes o vencidas</strong><span id="quality-summary-capa-value">0</span>
+              </button>
+              <button type="button" id="quality-summary-nc" class="quality-summary-item" data-quality-target="quality-non-conformances">
+                <strong>No conformidades abiertas</strong><span id="quality-summary-nc-value">0</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="card" aria-labelledby="quality-activity-heading">
+            <h2 id="quality-activity-heading">Actividad reciente</h2>
+            <div id="quality-recent-activity" class="empty">Sin actividad registrada.</div>
+          </section>
+
+          <section class="card" aria-labelledby="quality-shortcuts-heading">
+            <h2 id="quality-shortcuts-heading">Accesos rápidos</h2>
+            <div id="quality-quick-actions" class="quality-shortcuts"></div>
+          </section>
 
           <section class="card" aria-labelledby="quality-alerts-heading">
             <h2 id="quality-alerts-heading">Alertas de calidad</h2>
@@ -485,7 +574,7 @@
           </div>
         </section>
 
-        <section id="view-pending-lots" class="view quality-shell" aria-labelledby="pending-lots-heading" hidden>
+        <section id="view-pending-lots" class="view quality-shell" data-quality-view="pending-lots" aria-labelledby="pending-lots-heading" hidden>
           <div class="page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 9h10"></path><path d="M7 13h10"></path><path d="M7 17h6"></path></svg>
@@ -501,6 +590,7 @@
             <div class="card-head">
               <h2 id="pending-lots-table-heading">Documentos origen</h2>
               <input id="pending-lots-search" class="table-search" type="search" placeholder="Buscar lote, origen o producto" aria-label="Buscar lotes pendientes" />
+              <button type="button" id="pending-lots-refresh" class="primary">Actualizar lotes</button>
             </div>
             <div class="table-scroll">
             <table class="data-table">
@@ -514,7 +604,7 @@
           </section>
         </section>
 
-        <section id="view-quality-plans" class="view quality-shell" aria-labelledby="quality-plans-heading" hidden>
+        <section id="view-quality-plans" class="view quality-shell" data-quality-view="quality-plans" aria-labelledby="quality-plans-heading" hidden>
           <div class="page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18H6z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path><path d="M9 16h4"></path></svg>
@@ -621,7 +711,7 @@
           </section>
         </section>
 
-        <section id="view-quality-checklists" class="view quality-shell" aria-labelledby="checklists-heading" hidden>
+        <section id="view-quality-checklists" class="view quality-shell" data-quality-view="quality-checklists" aria-labelledby="checklists-heading" hidden>
           <div class="page-heading checklist-page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h9a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path><path d="m3 7 2 2 2-2"></path><path d="m3 13 2 2 2-2"></path><path d="m3 19 2 2 2-2"></path><path d="M12 8h4"></path><path d="M12 14h4"></path></svg>
@@ -747,7 +837,7 @@
           </section>
         </section>
 
-        <section id="view-inspections" class="view quality-shell" aria-labelledby="inspections-heading" hidden>
+        <section id="view-inspections" class="view quality-shell" data-quality-view="quality-inspections" aria-labelledby="inspections-heading" hidden>
           <div class="page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 5 5"></path><path d="m7.5 10.5 2 2 4-4.5"></path></svg>
@@ -857,7 +947,7 @@
           </section>
         </section>
 
-        <section id="view-non-conformance" class="view quality-shell" aria-labelledby="nc-heading" hidden>
+        <section id="view-non-conformance" class="view quality-shell" data-quality-view="quality-non-conformances" aria-labelledby="nc-heading" hidden>
           <div class="page-heading nc-page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 21 19H3L12 3z"></path><path d="M12 9v4.5"></path><path d="M12 16.5v.1"></path></svg>
@@ -1155,7 +1245,7 @@
           </section>
         </section>
 
-        <section id="view-corrective-actions" class="view quality-shell" aria-labelledby="capa-view-heading" hidden>
+        <section id="view-corrective-actions" class="view quality-shell" data-quality-view="quality-capa" aria-labelledby="capa-view-heading" hidden>
           <div class="page-heading capa-page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7a8 8 0 0 0-14-2L4 7"></path><path d="M4 3v4h4"></path><path d="M4 17a8 8 0 0 0 14 2l2-2"></path><path d="M20 21v-4h-4"></path></svg>
@@ -1325,7 +1415,7 @@
           </section>
         </section>
 
-        <section id="view-quality-documents" class="view quality-shell" aria-labelledby="docm-view-heading" hidden>
+        <section id="view-quality-documents" class="view quality-shell" data-quality-view="quality-documents" aria-labelledby="docm-view-heading" hidden>
           <div class="page-heading docm-page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l5 5v13H6z"></path><path d="M14 3v5h5"></path><path d="M9 13h7"></path><path d="M9 17h7"></path></svg>
@@ -1478,7 +1568,7 @@
           </section>
         </section>
 
-        <section id="view-quality-reports" class="view quality-shell" aria-labelledby="rep-view-heading" hidden>
+        <section id="view-quality-reports" class="view quality-shell" data-quality-view="quality-reports" aria-labelledby="rep-view-heading" hidden>
           <div class="page-heading rep-page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M7 16V9"></path><path d="M12 16V5"></path><path d="M17 16v-5"></path><path d="M5 7l5-3 4 2 5-3"></path></svg>
@@ -1599,7 +1689,73 @@
           </div>
         </section>
 
-        <section id="view-quality-settings" class="view quality-shell" aria-labelledby="qset-view-heading" hidden>
+        <section id="view-quality-approvals" class="view quality-shell" data-quality-view="quality-approvals" aria-labelledby="approvals-heading" hidden>
+          <div class="page-heading">
+            <span class="page-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"></path><path d="m7.5 12 3 3 6-7"></path></svg>
+            </span>
+            <div>
+              <span class="page-eyebrow">ERP / Control de Calidad</span>
+              <h1 id="approvals-heading">Aprobaciones pendientes</h1>
+              <p class="muted">Bandejas únicas de planes, listas, documentos, inspecciones y cierres CAPA.</p>
+            </div>
+          </div>
+
+          <section class="card" aria-labelledby="approval-filters-heading">
+            <div class="card-head">
+              <h2 id="approval-filters-heading">Buscar y filtrar</h2>
+              <span class="muted" id="approval-result-count"></span>
+            </div>
+            <div class="approval-filters">
+              <label class="sr-only" for="approval-type-filter">Filtrar por tipo de pendiente</label>
+              <select id="approval-type-filter" aria-label="Filtrar por tipo de pendiente">
+                <option value="">Todas las bandejas</option>
+                <option value="plans">Planes</option>
+                <option value="checklists">Listas de verificación</option>
+                <option value="documents">Documentos</option>
+                <option value="inspections">Inspecciones</option>
+                <option value="capa">Cierres CAPA</option>
+              </select>
+              <label class="sr-only" for="approval-search">Buscar en las bandejas cargadas</label>
+              <input id="approval-search" class="table-search" type="search" placeholder="Buscar en las bandejas cargadas" aria-label="Buscar en las bandejas cargadas" />
+              <button type="button" id="approval-refresh" class="primary">Actualizar bandejas</button>
+            </div>
+            <div class="approval-counters" id="queue-counters" aria-label="Contadores de bandejas">
+              <span>Planes <strong id="queue-count-plans">0</strong></span>
+              <span>Listas <strong id="queue-count-checklists">0</strong></span>
+              <span>Documentos <strong id="queue-count-documents">0</strong></span>
+              <span>Inspecciones <strong id="queue-count-inspections">0</strong></span>
+              <span>CAPA <strong id="queue-count-capa">0</strong></span>
+            </div>
+          </section>
+
+          <div id="review-permission-notice" hidden></div>
+          <div id="review-queues" data-permission="view_approval_queues">
+            <section class="card" data-queue-section="plans" aria-labelledby="queue-plans-heading">
+              <h2 id="queue-plans-heading">Planes de inspección</h2>
+              <div id="queue-plans"></div>
+            </section>
+            <section class="card" data-queue-section="checklists" aria-labelledby="queue-checklists-heading">
+              <h2 id="queue-checklists-heading">Listas de verificación</h2>
+              <div id="queue-checklists"></div>
+            </section>
+            <section class="card" data-queue-section="documents" aria-labelledby="queue-documents-heading">
+              <h2 id="queue-documents-heading">Documentos</h2>
+              <div id="queue-documents"></div>
+            </section>
+            <section class="card" data-queue-section="inspections" aria-labelledby="queue-inspections-heading">
+              <h2 id="queue-inspections-heading">Inspecciones</h2>
+              <div id="queue-inspections"></div>
+            </section>
+            <section class="card" data-queue-section="capa" aria-labelledby="queue-capa-heading">
+              <h2 id="queue-capa-heading">Cierres CAPA</h2>
+              <div id="queue-capa"></div>
+            </section>
+          </div>
+          <div class="error" id="review-queue-error" aria-live="polite"></div>
+        </section>
+
+        <section id="view-quality-settings" class="view quality-shell" data-quality-view="quality-settings" aria-labelledby="qset-view-heading" hidden>
           <div class="page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3"></path><path d="M12 19v3"></path><path d="M2 12h3"></path><path d="M19 12h3"></path><path d="m4.9 4.9 2.1 2.1"></path><path d="m17 17 2.1 2.1"></path><path d="m19.1 4.9-2.1 2.1"></path><path d="m7 17-2.1 2.1"></path></svg>
@@ -1610,6 +1766,20 @@
             </div>
             <button type="button" id="qset-reset" class="button secondary">Restablecer valores</button>
           </div>
+
+          <section class="card" aria-labelledby="qset-role-heading">
+            <h2 id="qset-role-heading">Rol activo</h2>
+            <div class="field-row quality-role-row">
+              <div>
+                <label for="quality-settings-role">Rol de uso</label>
+                <select id="quality-settings-role">
+                  <option value="jefe_calidad">Jefe de Calidad</option>
+                  <option value="inspector">Inspector de Calidad</option>
+                  <option value="gerente">Gerente de Operaciones</option>
+                </select>
+              </div>
+            </div>
+          </section>
 
           <div class="qset-layout">
             <aside class="card qset-menu" aria-labelledby="qset-menu-heading">
@@ -1777,7 +1947,7 @@
           </div>
         </section>
 
-        <section id="view-quality-history" class="view quality-shell" aria-labelledby="history-heading" hidden>
+        <section id="view-quality-history" class="view quality-shell" data-quality-view="quality-history" aria-labelledby="history-heading" hidden>
           <div class="page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
@@ -1847,7 +2017,7 @@
           </section>
         </section>
 
-        <section id="view-quality-audit-log" class="view quality-shell" aria-labelledby="audit-heading" hidden>
+        <section id="view-quality-audit-log" class="view quality-shell" data-quality-view="quality-audit-log" aria-labelledby="audit-heading" hidden>
           <div class="page-heading">
             <span class="page-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18H6z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path><path d="m3 6 1.5 1L7 4.5"></path><path d="m3 12 1.5 1L7 10.5"></path></svg>
@@ -1859,7 +2029,9 @@
             </div>
           </div>
 
-          <section class="card" aria-labelledby="audit-filters-heading">
+          <div id="audit-permission-notice" hidden></div>
+
+          <section class="card" aria-labelledby="audit-filters-heading" data-permission="view_audit">
             <h2 id="audit-filters-heading">Filtros</h2>
             <form id="audit-filter-form">
               <div class="field-row">

@@ -1,3 +1,4 @@
+import * as storage from '../storage.js';
 import {
   loadCollection,
   loadExternal,
@@ -7,6 +8,7 @@ import {
   updateInspection,
   saveDraftInspection,
   completeInspection,
+  submitInspectionForReview,
   validateInspection,
   evidenceFor,
   deleteEvidence,
@@ -26,6 +28,17 @@ import {
   qs
 } from './quality-utils.js';
 import { addEvidenceFromFile, downloadEvidence, renderEvidenceList } from './evidence.js';
+import { can, assertCan, applyPermissionState } from '../permissions.js';
+import { renderStatusBadge } from './status-badge.js';
+import { renderPermissionNotice } from './permission-notice.js';
+
+function activeRole(){
+  const getter = storage.getActiveRole;
+  if(typeof getter === 'function'){
+    try{ return getter(); }catch{ return 'jefe_calidad'; }
+  }
+  return 'jefe_calidad';
+}
 
 const INSPECTION_ERROR_FIELDS = {
   inspection_plan_id: 'error-inspection-plan',
@@ -389,7 +402,7 @@ function numericResults(evaluation){
   return evaluation.results.filter(result => result.pass_fail !== null);
 }
 
-function persistInspection(evaluation, complete){
+function persistInspection(evaluation, mode){
   const header = collectInspectionHeader();
   const check = validateInspection(header);
   showInspectionErrors(check.errors);
@@ -404,11 +417,16 @@ function persistInspection(evaluation, complete){
   }
   qs('inspection-id').value = inspectionId;
 
-  if(complete){
-    const { inspection } = completeInspection(inspectionId, evaluation.overall_result, numericResults(evaluation));
+  const results = numericResults(evaluation);
+  if(mode === 'submit'){
+    saveDraftInspection(inspectionId, results, activeRole());
+    return submitInspectionForReview(inspectionId, activeRole());
+  }
+  if(mode === 'complete'){
+    const { inspection } = completeInspection(inspectionId, evaluation.overall_result, results, activeRole());
     return inspection;
   }
-  saveDraftInspection(inspectionId, numericResults(evaluation));
+  saveDraftInspection(inspectionId, results, activeRole());
   return { inspection_id: inspectionId, inspection_status: 'draft' };
 }
 
@@ -450,41 +468,47 @@ export function handleCompleteInspection(){
   const evaluation = previewEvaluation();
   if(!evaluation) return null;
 
+  const header = collectInspectionHeader();
+  const check = validateInspection(header);
+  const plan = check.plan;
+  const checklist = check.checklist;
+  assertCan(activeRole(), 'submit_inspection', {
+    status: 'draft',
+    planStatus: plan && plan.status,
+    checklistStatus: checklist ? checklist.status : undefined
+  });
+
   if(evaluation.status === 'incomplete'){
-    const saved = persistInspection(evaluation, false);
+    const saved = persistInspection(evaluation, 'draft');
     if(saved){
-      const plan = selectedPlan();
-      const names = (plan ? plan.criteria : [])
+      const planRecord = selectedPlan();
+      const names = (planRecord ? planRecord.criteria : [])
         .filter(c => evaluation.missing_criteria_ids.includes(c.criteria_id))
         .map(c => c.criteria_name);
       const error = qs('inspection-error');
-      error.textContent = `No se puede emitir dictamen: faltan mediciones de ${names.join(', ') || 'uno o más criterios'}. La inspección queda en borrador.`;
+      error.textContent = `No se puede enviar a revisión: faltan mediciones de ${names.join(', ') || 'uno o más criterios'}. La inspección queda en borrador.`;
       error.classList.remove('info');
     }
     renderDrafts();
     return null;
   }
 
-  const built = persistInspection(evaluation, true);
-  if(!built) return null;
+  const submitted = persistInspection(evaluation, 'submit');
+  if(!submitted) return null;
 
   const overall = evaluation.overall_result;
-  const message = overall === 'failed'
-    ? 'Inspección completada: Reprobado. Se generó una no conformidad automática.'
-    : overall === 'conditional'
-      ? 'Inspección completada: Condicional. Queda pendiente de revisión del Jefe de Calidad.'
-      : 'Inspección completada: Aprobado.';
+  const message = `Inspección enviada a revisión con dictamen propuesto: ${resultLabel(overall)}. El dictamen final lo emite el Jefe de Calidad.`;
 
   resetInspectionForm({ keepMessage: true });
   const verdict = qs('inspection-verdict');
   verdict.hidden = false;
-  verdict.className = `verdict ${overall === 'passed' ? 'verdict-pass' : overall === 'failed' ? 'verdict-fail' : 'verdict-conditional'}`;
+  verdict.className = 'verdict verdict-conditional';
   verdict.textContent = message;
   const evidenceSelect = qs('inspection-evidence-inspection');
-  if(evidenceSelect) evidenceSelect.value = built.inspection_id;
+  if(evidenceSelect) evidenceSelect.value = submitted.inspection_id;
   renderDrafts();
   renderInspectionEvidence();
-  return built;
+  return submitted;
 }
 
 function loadDraft(inspection){
@@ -523,15 +547,17 @@ export function renderDrafts(){
     item.className = 'draft-item';
     const text = document.createElement('span');
     text.textContent = `${planName(maps, inspection.inspection_plan_id)} · ${moduleLabel(inspection.reference_module)} ${inspection.reference_id} · ${inspection.inspection_date}`;
-    item.appendChild(text);
+    item.append(text, renderStatusBadge('draft'));
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'secondary';
     btn.textContent = 'Continuar';
     btn.dataset.draftId = inspection.inspection_id;
+    btn.dataset.permission = 'execute_inspection';
     item.appendChild(btn);
     container.appendChild(item);
   });
+  applyPermissionState(container, activeRole());
 }
 
 export function renderInspectionEvidence(){
@@ -705,8 +731,13 @@ export function initInspectionEngine(){
     previewEvaluation();
   });
   qs('inspection-measurements').addEventListener('input', () => previewEvaluation());
-  qs('inspection-save-draft').addEventListener('click', () => handleSaveDraft());
-  qs('inspection-complete').addEventListener('click', () => handleCompleteInspection());
+  const saveDraft = qs('inspection-save-draft');
+  saveDraft.dataset.permission = 'execute_inspection';
+  saveDraft.addEventListener('click', () => handleSaveDraft());
+  const complete = qs('inspection-complete');
+  complete.textContent = 'Enviar a revisión';
+  complete.dataset.permission = 'submit_inspection';
+  complete.addEventListener('click', () => handleCompleteInspection());
   qs('inspection-reset').addEventListener('click', () => resetInspectionForm());
   qs('inspection-drafts').addEventListener('click', event => {
     const btn = event.target.closest('button[data-draft-id]');
@@ -717,4 +748,6 @@ export function initInspectionEngine(){
   qs('inspection-evidence-form').addEventListener('submit', handleInspectionEvidenceSubmit);
   qs('inspection-evidence-inspection').addEventListener('change', () => renderInspectionEvidence());
   qs('inspection-evidence-list').addEventListener('click', handleInspectionEvidenceClick);
+  if(!can(activeRole(), 'submit_inspection')) form.prepend(renderPermissionNotice('submit_inspection'));
+  applyPermissionState(form, activeRole());
 }

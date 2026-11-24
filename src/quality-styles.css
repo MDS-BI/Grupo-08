@@ -1,10 +1,23 @@
 :root {
   --qc-navy: #0b2340;
   --qc-blue: #2563eb;
-  --qc-blue-dark: #1d4ed8;
+  --qc-blue-dark: #1e40af;
   --qc-blue-soft: #eef4ff;
-  --qc-line: #e1e8f2;
-  --qc-radius: 14px;
+  --qc-line: #dde3ec;
+  --qc-radius: 10px;
+  --qc-radius-control: 8px;
+  --qc-space: 4px;
+  --qc-surface: #ffffff;
+  --qc-background: #f2f4f8;
+  --qc-text: #17233b;
+  --qc-text-muted: #475569;
+  --qc-approved: #166534;
+  --qc-approved-bg: #dcfce7;
+  --qc-pending: #92400e;
+  --qc-pending-bg: #fef3c7;
+  --qc-rejected: #b91c1c;
+  --qc-rejected-bg: #fee2e2;
+  --qc-focus: #2563eb;
   --qc-shadow: 0 6px 22px rgba(15, 35, 70, 0.06);
 }
 
@@ -1358,4 +1371,183 @@
   #view-quality-reports .card { box-shadow: none !important; border: 1px solid #cbd5e1 !important; break-inside: avoid; }
   #view-quality-reports .rep-chart-card { break-inside: avoid; }
   #view-quality-reports .rep-charts-grid { gap: 10px; }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sidebar .nav-related {
+  display: flex;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--qc-radius-control);
+  background: transparent;
+  color: #8ea9d4;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+}
+.sidebar .nav-related:hover,
+.sidebar .nav-related.active { background: rgba(255, 255, 255, 0.08); color: #ffffff; }
+
+.quality-role-chip {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 4px 8px;
+  border: 1px solid #cbdcf8;
+  border-radius: 999px;
+  background: var(--qc-blue-soft);
+  color: var(--qc-blue-dark);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.quality-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.quality-toolbar .quality-role-row { margin-top: 0; }
+.quality-toolbar .form-actions { margin-top: 0; }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.status-badge-icon { width: 18px; height: 18px; flex: 0 0 18px; }
+.status-badge-compact { padding: 2px 8px; font-size: 0.72rem; }
+.status-draft,
+.status-pending,
+.status-pending_review,
+.status-pending_approval { border-color: #f3d9a4; background: var(--qc-pending-bg); color: var(--qc-pending); }
+.status-approved { border-color: #a7e0b8; background: var(--qc-approved-bg); color: var(--qc-approved); }
+.status-rejected,
+.status-overdue { border-color: #f2c4bd; background: var(--qc-rejected-bg); color: var(--qc-rejected); }
+.status-result { margin-left: 6px; padding-left: 8px; border-left: 1px solid currentColor; }
+.status-legend { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.permission-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid #f3d9a4;
+  border-left: 4px solid var(--qc-pending);
+  border-radius: var(--qc-radius);
+  background: var(--qc-pending-bg);
+  color: var(--qc-pending);
+  font-weight: 600;
+}
+.permission-notice svg { width: 18px; height: 18px; flex: 0 0 18px; }
+
+.review-table td { min-width: 140px; }
+.capa-review-actions { min-width: 320px; }
+.capa-review-actions select,
+.capa-review-actions textarea { margin-bottom: 8px; }
+.queue-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.approval-filters,
+.approval-counters,
+.quality-summary-grid,
+.quality-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.approval-filters select,
+.approval-filters input { max-width: 320px; }
+.approval-counters span {
+  padding: 6px 10px;
+  border: 1px solid var(--qc-line);
+  border-radius: var(--qc-radius-control);
+  background: #fbfdff;
+  color: var(--qc-text-muted);
+  font-size: 0.78rem;
+}
+.approval-counters strong { color: var(--qc-text); }
+
+.quality-summary-item {
+  flex: 1 1 200px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--qc-line);
+  border-radius: var(--qc-radius);
+  background: #fbfdff;
+  text-align: left;
+}
+.quality-summary-item span {
+  min-width: 36px;
+  padding: 4px 8px;
+  border-radius: var(--qc-radius-control);
+  background: var(--qc-blue-soft);
+  color: var(--qc-blue-dark);
+  font-weight: 800;
+  text-align: center;
+}
+.quality-summary-item[data-permission="view_approval_queues"] span { background: var(--qc-pending-bg); color: var(--qc-pending); }
+
+.recent-activity-list { display: grid; gap: 8px; }
+.recent-activity-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--qc-line); }
+.recent-activity-item:last-child { border-bottom: 0; }
+
+.table-scroll { max-width: 100%; overflow-x: auto; }
+[data-permission][aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+:where(button, input, select, textarea, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--qc-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1024px) {
+  .quality-toolbar { align-items: stretch; }
+  .quality-summary-item { flex-basis: 45%; }
+  .review-table td { min-width: 120px; }
+}
+
+@media (max-width: 768px) {
+  .quality-shell { padding: 16px 0 32px; }
+  .quality-shell .page-heading { gap: 10px; }
+  .quality-shell .page-icon { flex-basis: 40px; height: 40px; }
+  .quality-shell h1 { font-size: 1.4rem; }
+  .quality-toolbar,
+  .approval-filters,
+  .approval-counters,
+  .quality-shortcuts { width: 100%; }
+  .approval-filters select,
+  .approval-filters input { max-width: none; }
+  .capa-review-actions { min-width: 240px; }
+}
+
+@media (max-width: 480px) {
+  .content { padding: 16px 8px 32px; }
+  .sidebar { padding: 12px 6px; }
+  .quality-shell h1 { font-size: 1.25rem; }
+  .quality-summary-item { flex-basis: 100%; }
+  .table-scroll { overflow-x: auto; }
+  .quality-summary-grid,
+  .recent-activity-item,
+  .permission-notice { align-items: flex-start; flex-direction: column; }
 }

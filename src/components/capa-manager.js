@@ -1,3 +1,4 @@
+import * as storage from '../storage.js';
 import {
   loadCollection,
   loadExternal,
@@ -10,6 +11,8 @@ import {
   deleteEvidence,
   qualityCatalog
 } from '../storage.js';
+import { can, assertCan, applyPermissionState } from '../permissions.js';
+import { CAPA_CLOSURE_STATUSES, EFFECTIVENESS_RESULTS } from '../quality-status.js';
 import {
   buildReferenceMaps,
   employeeName,
@@ -19,6 +22,8 @@ import {
   actionButton
 } from './quality-utils.js';
 import { addEvidenceFromFile, downloadEvidence, renderEvidenceList } from './evidence.js';
+import { renderStatusBadge, statusLabel } from './status-badge.js';
+import { renderPermissionNotice } from './permission-notice.js';
 
 const ERROR_FIELDS = {
   action_category: 'error-capm-category',
@@ -76,7 +81,159 @@ const AUDIT_ACTION_LABELS = {
   delete: 'Eliminación'
 };
 
+const CLOSURE_META = {
+  pending: { label: 'Pendiente', className: 'status-pending badge-pending' },
+  approved: { label: 'Aprobado', className: 'status-approved badge-approved' },
+  rejected: { label: 'Rechazado', className: 'status-rejected badge-rejected' }
+};
+
+const EFFECTIVENESS_LABELS = {
+  effective: 'Eficaz',
+  not_effective: 'No eficaz'
+};
+
 let currentDetailId = '';
+
+function activeRole(){
+  const getter = storage.getActiveRole;
+  if(typeof getter === 'function'){
+    try{ return getter(); }catch{ return 'jefe_calidad'; }
+  }
+  return 'jefe_calidad';
+}
+
+function invoke(name, ...args){
+  const fn = storage[name];
+  if(typeof fn !== 'function') throw new Error(`La operación ${name} no está disponible en este momento.`);
+  return fn(...args);
+}
+
+function capaContext(action){
+  return {
+    status: action && action.status,
+    closureStatus: action && action.closure_status
+  };
+}
+
+function workflowButton(label, dataset, permission, disabled){
+  const button = actionButton(label, 'secondary', dataset);
+  if(disabled){
+    button.disabled = true;
+    button.dataset.stateDisabled = 'true';
+  }else{
+    button.dataset.permission = permission;
+  }
+  return button;
+}
+
+function applyStateDisables(root){
+  if(!root || typeof root.querySelectorAll !== 'function') return;
+  root.querySelectorAll('[data-state-disabled]').forEach(button => { button.disabled = true; });
+}
+
+function applyCapaPermissions(root){
+  const scope = root || document;
+  applyPermissionState(scope, activeRole());
+  applyStateDisables(scope);
+}
+
+function permissionNotice(container, action, context){
+  if(!container || can(activeRole(), action, context)) return;
+  [...container.children].forEach(child => {
+    if(child.classList && child.classList.contains('permission-notice')) child.remove();
+  });
+  container.prepend(renderPermissionNotice(action));
+}
+
+function setDetailError(message){
+  const error = qs('capm-detail-error') || qs('capm-error');
+  if(error) error.textContent = message || '';
+}
+
+function reloadAction(id){
+  renderCapaManager();
+  showCapaDetail(id);
+}
+
+function completeAction(action){
+  try{
+    assertCan(activeRole(), 'complete_capa', capaContext(action));
+    const updated = updateCorrectiveAction(action.id, { status: 'completed', progress: 100 });
+    setDetailError('');
+    reloadAction(updated.id);
+  }catch(err){
+    setDetailError(err.message);
+  }
+}
+
+function requestClosure(action){
+  try{
+    assertCan(activeRole(), 'request_capa_closure', capaContext(action));
+    const updated = invoke('requestCapaClosure', action.id, action.responsible_employee_id || activeRole());
+    setDetailError('');
+    reloadAction(updated.id);
+  }catch(err){
+    setDetailError(err.message);
+  }
+}
+
+function saveEffectiveness(action){
+  const result = qs('capm-effectiveness') ? qs('capm-effectiveness').value : '';
+  const observations = qs('capm-effectiveness-observations') ? qs('capm-effectiveness-observations').value.trim() : '';
+  if(!result || !observations){
+    setDetailError('Registra la eficacia y sus observaciones antes de continuar.');
+    return;
+  }
+  try{
+    assertCan(activeRole(), 'register_effectiveness', capaContext(action));
+    const updated = invoke('registerCapaEffectiveness', action.id, result, observations, activeRole());
+    setDetailError('');
+    reloadAction(updated.id);
+  }catch(err){
+    setDetailError(err.message);
+  }
+}
+
+function reviewClosure(action, decision){
+  const effectiveness = qs('capm-effectiveness') ? qs('capm-effectiveness').value : '';
+  const effectivenessNotes = qs('capm-effectiveness-observations') ? qs('capm-effectiveness-observations').value.trim() : '';
+  let justification = qs('capm-closure-justification') ? qs('capm-closure-justification').value.trim() : '';
+  if(decision === 'rejected' && !justification && typeof prompt === 'function'){
+    justification = String(prompt('Justificación del rechazo del cierre') || '').trim();
+  }
+  if(effectiveness && !effectivenessNotes){
+    setDetailError('Registra las observaciones de eficacia antes de decidir el cierre.');
+    return;
+  }
+  if(decision === 'rejected' && !justification){
+    setDetailError('Registra la justificación para continuar.');
+    return;
+  }
+  try{
+    assertCan(activeRole(), 'review_capa_closure', capaContext(action));
+    const updated = invoke(
+      'reviewCapaClosure',
+      action.id,
+      decision,
+      effectiveness || null,
+      effectivenessNotes || null,
+      activeRole(),
+      justification || null
+    );
+    setDetailError('');
+    reloadAction(updated.id);
+  }catch(err){
+    setDetailError(err.message);
+  }
+}
+
+function closureBadge(status){
+  const key = CAPA_CLOSURE_STATUSES.includes(status) ? status : 'pending';
+  const badgeEl = renderStatusBadge(key);
+  badgeEl.classList.add(CLOSURE_META[key].className);
+  badgeEl.setAttribute('aria-label', `Cierre: ${statusLabel(key)}`);
+  return badgeEl;
+}
 
 function populateSelect(select, records, valueKey, labelFn, blankLabel){
   if(!select) return;
@@ -227,8 +384,9 @@ function renderSummary(actions){
   const values = [
     { key: 'pending', label: 'Acciones pendientes', value: actions.filter(a => a.status === 'pending').length, hint: 'Sin iniciar' },
     { key: 'progress', label: 'En ejecución', value: actions.filter(a => a.status === 'in_progress').length, hint: 'Trabajo en curso' },
-    { key: 'completed', label: 'Completadas', value: actions.filter(a => a.status === 'completed').length, hint: 'Cerradas y verificadas' },
-    { key: 'overdue', label: 'Fuera de plazo', value: actions.filter(a => isCapaOverdue(a)).length, hint: 'Requieren atención inmediata' }
+    { key: 'completed', label: 'Completadas', value: actions.filter(a => a.status === 'completed').length, hint: 'Ejecución reportada' },
+    { key: 'overdue', label: 'Fuera de plazo', value: actions.filter(a => isCapaOverdue(a)).length, hint: 'Requieren atención inmediata' },
+    { key: 'closure', label: 'Cierres pendientes', value: actions.filter(a => a.closure_status === 'pending').length, hint: 'Requieren revisión de jefatura' }
   ];
   container.replaceChildren(...values.map(item => {
     const card = document.createElement('article');
@@ -352,6 +510,12 @@ function renderList(){
     const statusCell = document.createElement('td');
     const status = metaFor(action.status, STATUS_META);
     statusCell.appendChild(badge(status.label, status.className));
+    if(action.closure_status){
+      const closureLabel = document.createElement('span');
+      closureLabel.className = 'nc-muted-meta';
+      closureLabel.textContent = 'Cierre';
+      statusCell.append(closureLabel, closureBadge(action.closure_status));
+    }
     tr.appendChild(statusCell);
 
     const progressCell = document.createElement('td');
@@ -361,8 +525,18 @@ function renderList(){
     const actions = document.createElement('td');
     actions.className = 'table-actions';
     actions.appendChild(actionButton('Ver detalle', 'secondary', { capmDetail: action.id }));
-    actions.appendChild(actionButton('Editar', 'secondary', { capmEdit: action.id }));
-    actions.appendChild(actionButton('Eliminar', 'danger', { capmDelete: action.id }));
+    const edit = actionButton('Editar', 'secondary', { capmEdit: action.id });
+    edit.dataset.permission = 'edit_capa';
+    actions.appendChild(edit);
+    if(action.status === 'in_progress' || action.closure_status === 'rejected'){
+      actions.appendChild(workflowButton('Completar', { capmComplete: action.id }, 'complete_capa', false));
+    }
+    if(action.status === 'completed' && action.closure_status !== 'approved' && action.closure_status !== 'pending'){
+      actions.appendChild(workflowButton('Solicitar cierre', { capmRequestClosure: action.id }, 'request_capa_closure', false));
+    }
+    const remove = actionButton('Eliminar', 'danger', { capmDelete: action.id });
+    remove.dataset.permission = 'delete_records';
+    actions.appendChild(remove);
     tr.appendChild(actions);
 
     tbody.appendChild(tr);
@@ -372,6 +546,7 @@ function renderList(){
   wrapper.className = 'table-scroll';
   wrapper.appendChild(table);
   host.appendChild(wrapper);
+  applyCapaPermissions(host);
 }
 
 function renderHistory(action){
@@ -411,6 +586,8 @@ function renderHistory(action){
 function renderDetailActions(action){
   const wrapper = document.createElement('div');
   wrapper.className = 'capa-detail-actions';
+  const role = activeRole();
+  const context = capaContext(action);
   const title = document.createElement('h3');
   title.textContent = 'Actualizar avance';
   const value = progressOf(action);
@@ -428,6 +605,7 @@ function renderDetailActions(action){
   output.id = 'capm-progress-output';
   output.textContent = `${value}%`;
   const save = actionButton('Guardar avance', 'secondary', { capmProgressSave: action.id });
+  save.dataset.permission = 'edit_capa';
   control.append(slider, output, save);
 
   const observationsTitle = document.createElement('h3');
@@ -438,11 +616,88 @@ function renderDetailActions(action){
   observations.value = action.observations || '';
   observations.placeholder = 'Registra notas sobre la ejecución de la acción';
   const saveObservations = actionButton('Guardar observaciones', 'secondary', { capmObservationsSave: action.id });
+  saveObservations.dataset.permission = 'edit_capa';
+
+  const closure = document.createElement('div');
+  closure.className = 'capa-closure-workflow';
+  const closureTitle = document.createElement('h3');
+  closureTitle.textContent = 'Cierre y eficacia';
+  closure.appendChild(closureTitle);
+  const closureState = document.createElement('div');
+  closureState.className = 'capa-closure-state';
+  if(action.closure_status){
+    closureState.append(closureBadge(action.closure_status));
+  }else{
+    closureState.appendChild(badge('Cierre no solicitado', 'capa-status-pending'));
+  }
+  closure.appendChild(closureState);
+
+  if(action.status === 'completed' && (!action.closure_status || action.closure_status === 'rejected')){
+    closure.appendChild(workflowButton('Solicitar cierre', { capmRequestClosure: action.id }, 'request_capa_closure', false));
+  }
+  if(action.closure_status === 'pending'){
+    if(can(role, 'register_effectiveness', context)){
+      const effectiveness = document.createElement('select');
+      effectiveness.id = 'capm-effectiveness';
+      effectiveness.setAttribute('aria-label', 'Resultado de eficacia');
+      const blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = '-- Selecciona eficacia --';
+      effectiveness.appendChild(blank);
+      EFFECTIVENESS_RESULTS.forEach(result => {
+        const option = document.createElement('option');
+        option.value = result;
+        option.textContent = EFFECTIVENESS_LABELS[result];
+        effectiveness.appendChild(option);
+      });
+      effectiveness.value = action.effectiveness_result || '';
+      const effectivenessNotes = document.createElement('textarea');
+      effectivenessNotes.id = 'capm-effectiveness-observations';
+      effectivenessNotes.rows = 2;
+      effectivenessNotes.placeholder = 'Observaciones de la revisión de eficacia';
+      effectivenessNotes.value = action.effectiveness_observations || '';
+      const saveEffectiveness = actionButton('Registrar eficacia', 'secondary', { capmEffectivenessSave: action.id });
+      saveEffectiveness.dataset.permission = 'register_effectiveness';
+      closure.append(effectiveness, effectivenessNotes, saveEffectiveness);
+    }
+    if(can(role, 'review_capa_closure', context)){
+      const justification = document.createElement('input');
+      justification.type = 'text';
+      justification.id = 'capm-closure-justification';
+      justification.placeholder = 'Justificación de la decisión de cierre';
+      justification.setAttribute('aria-label', 'Justificación de la decisión de cierre');
+      const approve = actionButton('Aprobar cierre', 'secondary', { capmClosureApprove: action.id });
+      approve.dataset.permission = 'review_capa_closure';
+      const reject = actionButton('Rechazar cierre', 'danger', { capmClosureReject: action.id });
+      reject.dataset.permission = 'review_capa_closure';
+      closure.append(justification, approve, reject);
+    }
+    permissionNotice(closure, 'review_capa_closure', context);
+  }
+  if(action.closure_status === 'approved' || action.closure_status === 'rejected'){
+    const summary = document.createElement('div');
+    summary.className = 'capa-closure-summary';
+    summary.textContent = [
+      action.effectiveness_result ? `Eficacia: ${EFFECTIVENESS_LABELS[action.effectiveness_result] || action.effectiveness_result}` : '',
+      action.closure_justification ? `Justificación: ${action.closure_justification}` : ''
+    ].filter(Boolean).join(' · ') || 'Sin observaciones de cierre.';
+    closure.appendChild(summary);
+  }
+
+  const detailActions = document.createElement('div');
+  detailActions.className = 'capa-detail-actions';
+  const complete = workflowButton('Marcar completada', { capmComplete: action.id }, 'complete_capa', !['pending', 'in_progress'].includes(action.status));
+  const edit = actionButton('Editar acción', 'secondary', { capmEdit: action.id });
+  edit.dataset.permission = 'edit_capa';
+  const remove = actionButton('Eliminar acción', 'danger', { capmDelete: action.id });
+  remove.dataset.permission = 'delete_records';
+  detailActions.append(complete, edit, remove, actionButton('Volver al listado', 'secondary', { capmBack: true }));
+
   const error = document.createElement('div');
   error.className = 'error';
   error.id = 'capm-detail-error';
   error.setAttribute('aria-live', 'polite');
-  wrapper.append(title, control, observationsTitle, observations, saveObservations, error);
+  wrapper.append(title, control, observationsTitle, observations, saveObservations, closure, detailActions, error);
   return wrapper;
 }
 
@@ -477,6 +732,7 @@ function showCapaDetail(id){
     badge(`Estado: ${status.label}`, status.className),
     badge(`Vencimiento: ${due.label}`, due.className)
   );
+  if(action.closure_status) badges.appendChild(closureBadge(action.closure_status));
   main.appendChild(badges);
 
   const progress = document.createElement('div');
@@ -547,6 +803,8 @@ function showCapaDetail(id){
     maps,
     { emptyMessage: 'Sin evidencia adjunta para esta acción.' }
   );
+  permissionNotice(main, 'edit_capa', capaContext(action));
+  applyCapaPermissions(body);
 }
 
 function collectPayload(){
@@ -629,6 +887,16 @@ function handleListClick(event){
     showCapaDetail(button.dataset.capmDetail);
     return;
   }
+  if(button.dataset.capmComplete){
+    const action = actions.find(a => a.id === button.dataset.capmComplete);
+    if(action) completeAction(action);
+    return;
+  }
+  if(button.dataset.capmRequestClosure){
+    const action = actions.find(a => a.id === button.dataset.capmRequestClosure);
+    if(action) requestClosure(action);
+    return;
+  }
   if(button.dataset.capmEdit){
     const action = actions.find(a => a.id === button.dataset.capmEdit);
     if(action) openCapaForm(action);
@@ -656,6 +924,27 @@ function handleDetailClick(event){
     return;
   }
   const actions = loadCollection('corrective_actions');
+  if(button.dataset.capmComplete){
+    const action = actions.find(a => a.id === button.dataset.capmComplete);
+    if(action) completeAction(action);
+    return;
+  }
+  if(button.dataset.capmRequestClosure){
+    const action = actions.find(a => a.id === button.dataset.capmRequestClosure);
+    if(action) requestClosure(action);
+    return;
+  }
+  if(button.dataset.capmEffectivenessSave){
+    const action = actions.find(a => a.id === button.dataset.capmEffectivenessSave);
+    if(action) saveEffectiveness(action);
+    return;
+  }
+  if(button.dataset.capmClosureApprove || button.dataset.capmClosureReject){
+    const id = button.dataset.capmClosureApprove || button.dataset.capmClosureReject;
+    const action = actions.find(a => a.id === id);
+    if(action) reviewClosure(action, button.dataset.capmClosureApprove ? 'approved' : 'rejected');
+    return;
+  }
   if(button.dataset.capmEdit){
     const action = actions.find(a => a.id === button.dataset.capmEdit);
     if(action) openCapaForm(action);
@@ -739,6 +1028,7 @@ export function renderCapaManager(){
   );
   renderList();
   if(currentDetailId) showCapaDetail(currentDetailId);
+  applyCapaPermissions(qs('view-corrective-actions') || document);
 }
 
 export function initCapaManager(){
@@ -746,7 +1036,9 @@ export function initCapaManager(){
   if(!form || form.dataset.wired === 'true') return;
   form.dataset.wired = 'true';
   form.addEventListener('submit', handleSubmit);
-  qs('capm-create').addEventListener('click', () => openCapaForm());
+  const create = qs('capm-create');
+  if(create) create.dataset.permission = 'propose_capa';
+  create.addEventListener('click', () => openCapaForm());
   qs('capm-cancel').addEventListener('click', hideCapaForm);
   qs('capm-form-back').addEventListener('click', hideCapaForm);
   qs('capm-detail-back').addEventListener('click', hideCapaDetail);

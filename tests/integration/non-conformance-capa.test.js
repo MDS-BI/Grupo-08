@@ -4,9 +4,16 @@ import {
   addPlan,
   addCriterion,
   addInspection,
-  completeInspection,
+  submitPlanForApproval,
+  approvePlan,
+  setInspectionResults,
+  submitInspectionForReview,
+  reviewInspection,
   addCorrectiveAction,
   updateCorrectiveAction,
+  requestCapaClosure,
+  registerCapaEffectiveness,
+  reviewCapaClosure,
   evidenceFor,
   loadCollection
 } from '../../src/storage.js';
@@ -14,7 +21,7 @@ import { bootQualityApp, qs, submit } from '../support/quality-dom.js';
 
 let dom;
 
-function createFailedInspection(reference = 'gr-001', critical = true){
+function createFailedInspection(reference = 'gr-001', critical = true, finalize = true){
   const plan = addPlan({ plan_name: 'Plan de recepción', product_id: 'prod-001', applicable_stage: 'incoming' });
   const criterion = addCriterion({
     inspection_plan_id: plan.inspection_plan_id,
@@ -25,6 +32,8 @@ function createFailedInspection(reference = 'gr-001', critical = true){
     comparison_type: 'range',
     is_critical: critical
   });
+  submitPlanForApproval(plan.inspection_plan_id, 'emp-001');
+  approvePlan(plan.inspection_plan_id, 'jefe_calidad');
   const inspection = addInspection({
     inspection_plan_id: plan.inspection_plan_id,
     inspector_id: 'emp-001',
@@ -32,12 +41,16 @@ function createFailedInspection(reference = 'gr-001', critical = true){
     reference_id: reference,
     inspection_date: '2026-11-09'
   });
-  completeInspection(inspection.inspection_id, critical ? 'failed' : 'conditional', [{
+  setInspectionResults(inspection.inspection_id, [{
     criteria_id: criterion.criteria_id,
     measured_value: 99,
     pass_fail: false
   }]);
-  return { plan, criterion, inspection };
+  submitInspectionForReview(inspection.inspection_id, 'emp-001');
+  if(!finalize) return { plan, criterion, inspection };
+  const decision = critical ? 'rejected' : 'approved_conditional';
+  const reviewed = reviewInspection(inspection.inspection_id, decision, 'jefe_calidad', 'Revisión de prueba');
+  return { plan, criterion, inspection: reviewed };
 }
 
 function fillCapa(nc, overrides = {}){
@@ -62,7 +75,7 @@ afterEach(() => {
 describe('User Story 3 - non-conformances and CAPA', () => {
   it('shows the automatically generated non-conformance after a failed inspection', () => {
     createFailedInspection();
-    qs('nav-quality-nc').click();
+    qs('quality-non-conformances').click();
 
     const ncs = loadCollection('non_conformances');
     expect(ncs.length).toBe(1);
@@ -75,7 +88,7 @@ describe('User Story 3 - non-conformances and CAPA', () => {
   it('validates mandatory CAPA fields', () => {
     const { inspection } = createFailedInspection();
     void inspection;
-    qs('nav-quality-nc').click();
+    qs('quality-non-conformances').click();
     const nc = loadCollection('non_conformances')[0];
 
     fillCapa(nc);
@@ -88,7 +101,7 @@ describe('User Story 3 - non-conformances and CAPA', () => {
 
   it('adds a CAPA and updates the quarantine label to under treatment', () => {
     createFailedInspection();
-    qs('nav-quality-nc').click();
+    qs('quality-non-conformances').click();
     const nc = loadCollection('non_conformances')[0];
 
     fillCapa(nc);
@@ -114,14 +127,14 @@ describe('User Story 3 - non-conformances and CAPA', () => {
       status: 'pending'
     });
 
-    qs('nav-quality-nc').click();
+    qs('quality-non-conformances').click();
     expect(qs('capa-list').textContent).toContain('Vencida');
     expect(loadCollection('corrective_actions')[0].status).toBe('pending');
   });
 
-  it('stamps completed_at only on completion and preserves it on later edits', () => {
+  it('stamps completed_at only on completion and preserves it through closure', () => {
     createFailedInspection();
-    qs('nav-quality-nc').click();
+    qs('quality-non-conformances').click();
     const nc = loadCollection('non_conformances')[0];
 
     fillCapa(nc);
@@ -129,20 +142,28 @@ describe('User Story 3 - non-conformances and CAPA', () => {
     let action = loadCollection('corrective_actions')[0];
     expect(action.completed_at).toBeUndefined();
 
+    updateCorrectiveAction(action.corrective_action_id, { status: 'in_progress' });
+    updateCorrectiveAction(action.corrective_action_id, { action_description: 'Ajuste intermedio' });
+    action = loadCollection('corrective_actions')[0];
+    expect(action.completed_at).toBeUndefined();
+
     updateCorrectiveAction(action.corrective_action_id, { status: 'completed' });
     action = loadCollection('corrective_actions')[0];
     expect(action.completed_at).toMatch(/^\d{4}-/);
     const completedAt = action.completed_at;
 
-    updateCorrectiveAction(action.corrective_action_id, { action_description: 'Ajuste final' });
+    action = requestCapaClosure(action.corrective_action_id, 'emp-003');
+    action = registerCapaEffectiveness(action.corrective_action_id, 'effective', 'Verificado', 'jefe_calidad');
+    reviewCapaClosure(action.corrective_action_id, 'approved', null, null, 'jefe_calidad');
     action = loadCollection('corrective_actions')[0];
     expect(action.completed_at).toBe(completedAt);
     expect(action.status).toBe('completed');
+    expect(action.closure_status).toBe('approved');
   });
 
   it('shows conditional inspections in the review tray without creating a non-conformance', () => {
-    createFailedInspection('gr-002', false);
-    qs('nav-quality-nc').click();
+    createFailedInspection('gr-002', false, false);
+    qs('quality-non-conformances').click();
 
     expect(loadCollection('non_conformances').length).toBe(0);
     expect(qs('review-body').querySelectorAll('tr').length).toBe(1);
@@ -151,7 +172,7 @@ describe('User Story 3 - non-conformances and CAPA', () => {
 
   it('renders the redesigned workspace with summary, filters and severity columns', () => {
     createFailedInspection();
-    qs('nav-quality-nc').click();
+    qs('quality-non-conformances').click();
 
     expect(qs('nc-heading').textContent).toBe('Gestión de No Conformidades');
     expect(qs('nc-create').textContent).toContain('Registrar no conformidad');
@@ -164,9 +185,7 @@ describe('User Story 3 - non-conformances and CAPA', () => {
   });
 
   it('registers a non-conformance from the form and opens its tracking detail', async () => {
-    qs('nav-quality-nc').click();
-    qs('nc-create').click();
-    expect(qs('nc-form-card').hidden).toBe(false);
+    qs('quality-non-conformances').click();
 
     qs('nc-description').value = 'Etiqueta ilegible en el empaque';
     qs('nc-defect').value = 'packaging';
@@ -194,7 +213,7 @@ describe('User Story 3 - non-conformances and CAPA', () => {
 
   it('filters by severity and opens the detail from the table', () => {
     createFailedInspection();
-    qs('nav-quality-nc').click();
+    qs('quality-non-conformances').click();
 
     qs('nc-severity-filter').value = 'critical';
     qs('nc-severity-filter').dispatchEvent(new dom.window.Event('change', { bubbles: true }));

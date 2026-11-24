@@ -1,5 +1,16 @@
 import { findAuditEntries } from '../storage.js';
 import { moduleLabel, qs } from './quality-utils.js';
+import { can, applyPermissionState } from '../permissions.js';
+import { renderPermissionNotice, clearPermissionNotice } from './permission-notice.js';
+
+const AUDIT_ROLE_KEY = 'erp_quality:viewer_role';
+
+function auditRole(){
+  const select = qs('quality-role') || qs('quality-settings-role');
+  const selected = select ? select.value : '';
+  if(selected) return selected;
+  try{ return localStorage.getItem(AUDIT_ROLE_KEY) || 'jefe_calidad'; }catch{ return 'jefe_calidad'; }
+}
 
 const ACTION_LABELS = Object.freeze({
   create: 'Alta',
@@ -68,6 +79,26 @@ export function renderAuditLog(filters = null){
   const error = qs('audit-log-error');
   if(!body || !empty) return [];
   if(error) error.textContent = '';
+  const view = qs('view-quality-audit-log');
+  const role = auditRole();
+  const noticeHost = qs('audit-permission-notice');
+  if(!can(role, 'view_audit')){
+    clearPermissionNotice(view);
+    if(noticeHost){
+      noticeHost.replaceChildren(renderPermissionNotice('view_audit'));
+      noticeHost.hidden = false;
+    }
+    body.replaceChildren();
+    body.hidden = true;
+    empty.hidden = false;
+    empty.textContent = 'No tienes permiso para consultar la bitácora de auditoría.';
+    applyPermissionState(view, role);
+    return [];
+  }
+  if(noticeHost){
+    noticeHost.replaceChildren();
+    noticeHost.hidden = true;
+  }
   const activeFilters = filters || currentAuditFilters();
   let entries;
   try{
@@ -123,6 +154,7 @@ export function renderAuditLog(filters = null){
     });
     body.appendChild(row);
   });
+  applyPermissionState(view, role);
   return entries;
 }
 
