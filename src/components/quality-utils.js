@@ -102,6 +102,6 @@ export function actionButton(label, className, dataset){
 
 export function emptyState(container, message, isEmpty){
   if(!container) return;
-  container.textContent = message;
-  container.hidden = !isEmpty;
+    container.textContent = isEmpty ? message : '';
+  container.hidden = false;
 }
