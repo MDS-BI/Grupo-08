@@ -91,28 +91,35 @@ El sistema compara cada medición con su tolerancia, calcula automáticamente el
 | **Jefe de Calidad / Planta** (táctico) | Definir estándares y resolver desviaciones. | Crea planes y criterios, revisa inspecciones condicionales, cambia dictámenes con justificación, gestiona no conformidades, cuarentena y CAPA, y configura alertas. |
 | **Gerente de Operaciones** (estratégico) | Evaluar el desempeño y el cumplimiento normativo. | Consulta y exporta KPIs, revisa el historial y audita la trazabilidad y los plazos CAPA. |
 
-En el MVP no hay inicio de sesión. El rol activo se elige con el selector **"Rol de uso"** del Dashboard.
+En el MVP no hay inicio de sesión. El rol activo se elige con el selector **"Usuario de calidad"** de la barra superior (Jefe de Calidad, Inspector o Gerente). Cada rol ve solo las acciones que le corresponden.
 
 ---
 
 ## 4. Funcionalidades y navegación
 
-La barra lateral organiza el módulo en 5 categorías y 12 entradas (ver [Menú lateral](#menú-lateral-5-categorías-y-12-entradas)), integradas en el template del módulo base del ERP (Panel, Entidades, Documentos, Búsqueda).
+La barra lateral organiza el módulo en 5 categorías y 12 entradas (ver [Menú lateral](#menú-lateral-5-categorías-y-12-entradas)), más 3 accesos relacionados. Todo vive dentro del template del módulo base del ERP, cuyas vistas originales (Entidades, Documentos y Búsqueda) siguen disponibles.
 
 | Vista | Qué permite hacer |
 | :--- | :--- |
-| **Dashboard** | KPIs de tasa de aprobación (global y por etapa), no conformidades abiertas por severidad, CAPA vencidas, eficacia CAPA e inspecciones pendientes; Pareto de defectos por producto y por etapa; alertas configurables; exportación de KPIs a CSV; selector de rol. |
-| **Lotes pendientes** | Documentos origen sin inspección completada, con el botón **Inspeccionar**. |
-| **Planes** | Crear, editar, duplicar y eliminar planes por producto y etapa, y definir sus criterios: valor esperado, tolerancia, unidad, tipo de comparación (`range`, `min`, `max`, `boolean`) y si el criterio es crítico. Un plan con inspecciones queda bloqueado y se versiona duplicándolo. |
-| **Inspecciones** | Formulario de inspección con evaluación automática por criterio, guardado como borrador, dictamen calculado al completar y evidencias adjuntas (PNG, JPG o PDF de hasta 5 MB). |
-| **No conformidades** | Bandeja de revisión de inspecciones `pending_review` y `completed` condicionales sin `review_decision`, dictamen final con justificación, no conformidades (tipo, severidad, estado), acciones CAPA (responsable, causa raíz, tipo, fecha límite, estado), bandeja de cierre CAPA, lotes en cuarentena y evidencias adjuntas de la no conformidad. |
-| **Historial** | Trazabilidad desde la inspección hasta la no conformidad y la CAPA, con filtros por lote, módulo origen y rango de fechas, y exportación a CSV. |
+| **Panel principal** | Dashboard de Calidad: tasa de aprobación (global y por etapa), no conformidades abiertas por severidad, CAPA vencidas, eficacia CAPA e inspecciones pendientes; Pareto de defectos; alertas; exportación de KPIs a CSV y acceso directo a las aprobaciones. |
+| **Búsqueda** | Búsqueda de registros del módulo. |
+| **Productos y materiales** | Catálogo de productos que se usa en los planes y las inspecciones. |
+| **Planes de calidad** | Crear, editar, duplicar y eliminar planes por producto y etapa, con sus criterios: valor esperado, tolerancia, unidad, comparación (`range`, `min`, `max`, `boolean`) y si el criterio es crítico. Un plan se envía a aprobación y solo un plan aprobado se puede usar. |
+| **Listas de verificación** | Listas de verificación aprobables y versionadas, que se pueden asociar a una inspección. |
+| **Inspecciones** | Formulario con módulo y documento origen (el lote), plan, inspector y mediciones. Cada criterio muestra "Cumple" o "No cumple" al instante, el dictamen se calcula solo y se pueden guardar borradores y adjuntar evidencias (PNG, JPG o PDF de hasta 5 MB). |
+| **No conformidades** | Indicadores y listado de no conformidades con filtros, registro manual, detalle con evidencias, revisión de inspecciones condicionales y cambio de dictamen con justificación. |
+| **Acciones CAPA** | Acciones correctivas y preventivas con responsable, causa raíz, fecha de inicio y fecha límite; seguimiento de avance, historial de cambios y evidencias. |
+| **Aprobaciones pendientes** | Bandeja única del Jefe de Calidad para aprobar o rechazar planes, listas, documentos, inspecciones y cierres de CAPA. |
+| **Documentos** | Documentos de calidad (procedimientos, instructivos) con código, versión, responsable y flujo de aprobación. |
+| **Reportes e indicadores** | Reportes de desempeño de calidad y reglas de alerta sobre los KPIs. |
+| **Configuración e instrumentación** | Parámetros del módulo (por ejemplo, generar la no conformidad automáticamente al reprobar), catálogos y alertas. |
+| *Accesos relacionados* | **Lotes pendientes** (documentos origen sin inspección), **Historial de inspecciones** (trazabilidad inspección → NC → CAPA, con filtros y exportación a CSV) y **Bitácora** de auditoría. |
 
 ### Reglas de negocio principales
 
 - **Dictamen propuesto:** `failed` si falla al menos un criterio crítico, `conditional` si solo fallan criterios no críticos y `passed` si todos cumplen. Las tolerancias son inclusivas y `pass_fail` nunca se captura a mano.
 - **Inspección incompleta:** si falta alguna medición, la inspección queda en borrador (`draft`), sin `proposed_result` ni dictamen.
-- **No conformidad automática:** solo una revisión válida con `review_decision = rejected` (`overall_result = failed`) genera un borrador de NC, con descripción autogenerada y editable, `defect_type = other`, severidad `major` y estado `open`. Ni los overrides ni la guarda de críticos la generan.
+- **No conformidad automática:** una inspección que termina `failed` genera la NC automáticamente mientras el parámetro `auto_create_nc_on_failure` esté activo (lo está por defecto, en **Configuración**). También la genera una revisión con `review_decision = rejected`. La NC nace con descripción autogenerada y editable, `defect_type = other`, severidad `major` y estado `open`. Ni los overrides ni la guarda de críticos la generan.
 - **Cuarentena:** un lote aparece en cuarentena mientras tenga una no conformidad `open` o `under_review`. Cuando tiene una CAPA asignada, se muestra como "Cuarentena - En tratamiento".
 - **CAPA vencida:** `due_date < hoy` y `closure_status != approved`; `completed` es ejecución reportada, no cierre aprobado.
 
@@ -152,22 +159,24 @@ La barra lateral organiza el módulo en 5 categorías y 12 entradas (ver [Menú 
 
 ### Menú lateral: 5 categorías y 12 entradas
 
-El menú es único, sin alias "Panel", "Dashboard" ni `quality-panel`. La sección activa se resalta con texto y `aria-current`.
+La sección activa se resalta con texto y `aria-current`.
 
 | Categoría | Entrada | ID exacto |
 | :--- | :--- | :--- |
-| GENERAL | Inicio / Dashboard | `quality-dashboard` |
+| GENERAL | Panel principal | `quality-dashboard` |
 | GENERAL | Búsqueda | `quality-search` |
+| GENERAL | Productos y materiales | `quality-entities` |
 | GESTIÓN DE CALIDAD | Planes de calidad | `quality-plans` |
 | GESTIÓN DE CALIDAD | Listas de verificación | `quality-checklists` |
 | GESTIÓN DE CALIDAD | Inspecciones | `quality-inspections` |
 | GESTIÓN DE CALIDAD | No conformidades | `quality-non-conformances` |
 | GESTIÓN DE CALIDAD | Acciones CAPA | `quality-capa` |
+| GESTIÓN DE CALIDAD | Aprobaciones pendientes | `quality-approvals` |
 | DOCUMENTACIÓN | Documentos | `quality-documents` |
-| DOCUMENTACIÓN | Aprobaciones pendientes | `quality-approvals` |
-| ANÁLISIS | Reportes | `quality-reports` |
-| ADMINISTRACIÓN | Entidades | `quality-entities` |
-| ADMINISTRACIÓN | Configuración | `quality-settings` |
+| ANÁLISIS | Reportes e indicadores | `quality-reports` |
+| ADMINISTRACIÓN | Configuración e instrumentación | `quality-settings` |
+
+Bajo **Accesos relacionados** están además Lotes pendientes, Historial de inspecciones y Bitácora.
 
 ### Exportación CSV
 
@@ -182,13 +191,16 @@ El historial se exporta en CSV UTF-8 respetando los filtros activos de lote y ra
 
 ## 5. Demo guiada (5 minutos)
 
-1. **Planes:** crea el plan "Recepción harina" para *Harina de trigo*, etapa *Recepción*. Agrega un criterio "Peso" con valor esperado 25, tolerancia 0,5, unidad kg, comparación `range` y marcado como **crítico**.
-2. **Lotes pendientes:** pulsa **Inspeccionar** en `gr-001` (Harina de trigo).
-3. **Inspecciones:** elige el plan y el inspector, ingresa **27** en el peso y pulsa **Completar inspección**. El dictamen es **Reprobado** y se genera la no conformidad.
-4. **No conformidades:** asigna una CAPA con responsable, causa raíz ("balanza descalibrada"), acción "reproceso" y fecha límite. El lote pasa a "Cuarentena - En tratamiento".
-5. Intenta **cambiar el dictamen a Aprobado:** el sistema lo bloquea porque falló un criterio crítico.
-6. **Dashboard:** revisa los KPIs y el Pareto, y cambia el *Rol de uso* a *Gerente* para ver cómo se oculta el detalle por inspector.
-7. **Historial:** filtra por el lote `gr-001` y exporta a CSV.
+Usa el rol **Jefe de Calidad** (selector "Usuario de calidad", arriba a la derecha).
+
+1. **Planes de calidad:** crea el plan "Recepción harina" para *Harina de trigo*, etapa *Recepción*. Agrega el criterio "Peso del saco" con valor esperado 25, tolerancia 0,5, unidad kg, comparación `range` y marcado como **crítico**. Luego pulsa **Enviar a aprobación**.
+2. **Aprobaciones pendientes:** aprueba el plan. Solo los planes aprobados aparecen al inspeccionar.
+3. **Inspecciones:** elige el módulo *Recepción de mercancía* y el documento `gr-001` (Harina de trigo). El sistema ofrece solo los planes de ese producto y etapa. Elige el plan y el inspector e ingresa **23,8** en el peso: aparece "No cumple" y el dictamen calculado es **Reprobado**. Pulsa **Enviar a revisión**.
+4. **No conformidades:** la no conformidad del lote ya está creada y abierta.
+5. **Acciones CAPA:** pulsa **Nueva acción**, asóciala a la no conformidad y define responsable, causa raíz ("báscula descalibrada"), descripción y fecha límite. El lote pasa a "Cuarentena - En tratamiento".
+6. **No conformidades → Cambiar dictamen:** intenta cambiarlo a *Aprobado*. El sistema lo bloquea porque falló un criterio crítico.
+7. **Panel principal:** revisa los KPIs y cambia el usuario a *Gerente* para ver cómo se oculta el detalle por inspector.
+8. **Historial de inspecciones:** filtra por el lote `gr-001` y exporta a CSV.
 
 ---
 
@@ -196,7 +208,7 @@ El historial se exporta en CSV UTF-8 respetando los filtros activos de lote y ra
 
 ![Modelo Entidad-Relación del módulo de Control de Calidad](specs/002-quality-control-module/mer.png)
 
-El módulo agrega **11 tablas** propias y se relaciona con **5 tablas** de otros módulos del ERP:
+El módulo agrega **11 tablas** propias. En el diagrama se relaciona con `products` y `employees`; además, cada inspección apunta a su lote en `goods_receipts`, `production_orders` o `shipments` mediante la referencia polimórfica `reference_module` + `reference_id`, por eso esas tres no se dibujan como relación directa:
 
 | Tabla | Descripción |
 | :--- | :--- |
@@ -281,8 +293,10 @@ Las decisiones principales están registradas como *issues* en la pestaña [Issu
 
 - **Stack:** [Vite](https://vite.dev/) + HTML, CSS y JavaScript sin frameworks, el mismo template del módulo base del ERP. Es una aplicación solo frontend.
 - **Persistencia:** `localStorage`. Los datos de calidad usan las claves `erp_quality:*` y los del ERP base, `erp_base:*` y `erp_base_module:*`.
-- **Motor de inspección:** función pura en `src/inspection-engine.js`, independiente de la interfaz y cubierta por pruebas unitarias.
-- **Pruebas:** [Vitest](https://vitest.dev/) + jsdom, unitarias en `tests/unit/` e integración en `tests/integration/`.
+- **Motor de inspección:** función pura en `src/inspection-engine.js`, independiente de la interfaz y cubierta por pruebas unitarias. La interfaz del formulario está en `src/components/inspection-engine.js`.
+- **Permisos y flujo:** `src/permissions.js` define qué puede hacer cada rol, `src/quality-status.js` los estados y `src/quality-migrations.js` normaliza datos antiguos.
+- **Pruebas:** [Vitest](https://vitest.dev/) + jsdom, unitarias en `tests/unit/` e integración en `tests/integration/` (271 pruebas al 24/11).
+- **Calidad de código:** ESLint (`npm run lint`) y Prettier (`npm run format`).
 
 ```text
 index.html                 Punto de entrada
@@ -292,7 +306,11 @@ src/
   storage.js               Colecciones en localStorage y reglas de integridad
   seed-data.js             Datos semilla de los módulos externos
   inspection-engine.js     Motor puro de evaluación de tolerancias
-  components/              Vistas: dashboard, planes, lotes, inspección, NC/CAPA, historial, evidencias
+  permissions.js           Permisos por rol
+  quality-status.js        Estados y etiquetas del flujo de calidad
+  quality-migrations.js    Migración de datos legados
+  components/              Vistas: dashboard, planes, listas, inspección, NC, CAPA,
+                           aprobaciones, documentos, reportes, configuración, historial, bitácora
 tests/                     Pruebas unitarias y de integración
 specs/                     Documentación Speckit (001 base, 002 calidad)
 ```
@@ -301,14 +319,8 @@ specs/                     Documentación Speckit (001 base, 002 calidad)
 
 ## 12. Equipo
 
-- Plaza Palacios, Eduardo Andrés
-- Ramírez Inostroza, Agustín Antonio
-- Llanos Leal, Carla Antonia
-- Valenzuela Carrasco, Raquel Esmeralda
-- Athens Squella, Constanza Isidora
-- Alvear Muñoz, Benjamín Andrés
-
---- | :--- |
+| Integrante | Usuario de GitHub |
+| :--- | :--- |
 | Plaza Palacios, Eduardo Andrés | `Eduard0771` |
 | Ramírez Inostroza, Agustín Antonio | `aguR62104` |
 | Llanos Leal, Carla Antonia | `carlaaall` |
