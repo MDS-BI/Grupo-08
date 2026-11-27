@@ -57,7 +57,7 @@
 
 **Goal**: Permitir al Jefe de Calidad crear y mantener planes de inspección con criterios, valores esperados, tolerancias, unidades, tipos de comparación y criticidad.
 
-**Independent Test**: Crear un plan para un producto y etapa, agregar criterios con valor esperado y tolerancia, y verificar que el plan queda disponible para ejecutar inspecciones.
+**Independent Test**: Crear un plan para un producto y etapa, agregar criterios con valor esperado y tolerancia, enviarlo a aprobación, aprobarlo y verificar que solo entonces queda disponible para ejecutar inspecciones.
 
 ### Pruebas para User Story 1
 
@@ -78,7 +78,7 @@
 
 ## Fase 4: User Story 2 - Identificar lotes pendientes y ejecutar una inspección con evaluación automática (Priority: P2)
 
-**Goal**: Mostrar lotes pendientes y permitir registrar mediciones en una inspección vinculada a un documento origen, calculando automáticamente `pass_fail` y `overall_result`.
+**Goal**: Mostrar lotes pendientes y permitir registrar mediciones en una inspección vinculada a un documento origen, calculando automáticamente `pass_fail` y `proposed_result`, con `overall_result` pendiente de la revisión del Jefe de Calidad.
 
 **Independent Test**: Abrir la lista de lotes pendientes, iniciar una inspección sobre un origen válido, ingresar mediciones y comprobar que el dictamen se calcula sin intervención manual.
 
@@ -452,7 +452,7 @@ Task: "Añadir estilos de bitácora en src/styles.css"
 - [x] T142 [Quality] Verificar la configuración de lint y formato en `package.json` y archivos de configuración de la raíz: instalar las dependencias declaradas y ejecutar `npm run lint` y `npm run format:check` sin errores; queda completado antes de T053, T055 y T143.
 - [x] T053 [Quality] Ejecutar `npm test`, `npm run lint`, `npm run format:check`, análisis estático definido en `package.json` y `npm run build` después de T142; corregir cualquier error bloqueante.
 - [x] T055 [Quality] Ejecutar `/speckit.analyze` sobre `spec.md`, `plan.md` y `tasks.md` después de completar T001–T148 excepto T055 y T143, y confirmar que no quedan hallazgos CRITICAL ni HIGH.
-- [x] T143 [Quality] Gate final: ejecutar `npm test`, `npm run lint`, `npm run format:check`, `npm run build` y `git diff --check`; confirmar T131–T148 completados en los tres anchos, T053 y T055 en verde, T140 completado y T141 sin huecos antes de declarar la feature implementada.
+- [ ] T143 [Quality] Gate final: ejecutar `npm test`, `npm run lint`, `npm run format:check`, `npm run build` y `git diff --check`; confirmar T131–T148 completados en los tres anchos, T053 y T055 en verde, T140 completado y T141 sin huecos antes de declarar la feature implementada.
 
 ### Matriz de trazabilidad FR/SC
 

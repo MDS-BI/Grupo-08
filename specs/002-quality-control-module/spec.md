@@ -555,7 +555,7 @@ Datos: todas las vistas y entidades del módulo; no introduce una entidad nueva.
 | CAPA | Aprueba o rechaza cierre y eficacia | Ejecuta, reporta y adjunta evidencia | Consulta estado y eficacia en solo lectura | Estado de ejecución y `closure_status` separados; fecha límite y vencimiento visibles; justificación de rechazo legible |
 | Cuarentena | Ve lotes y su tratativa | Ve lotes y acciones permitidas sobre NC | Consulta en solo lectura | Estado "Cuarentena - En tratamiento" diferenciado; lote, severidad y CAPA asociada visibles |
 | Historial | Consulta toda la trazabilidad y exporta | Consulta registros permitidos; sin exportación | Consulta y exporta en solo lectura | Filtros de lote y fechas, número de resultados y columna de resultados por criterio claramente identificados |
-| Bitácora | Consulta y filtra la bitácora completa | Consulta en modo lectura según permisos | Consulta en modo lectura | Actor, fecha, entidad, acción, lote, valores anterior y nuevo, y justificación legibles; filtros activos visibles |
+| Bitácora | Consulta y filtra la bitácora completa | No ve bitácora | Consulta en modo lectura | Actor, fecha, entidad, acción, lote, valores anterior y nuevo, y justificación legibles; filtros activos visibles |
 | Exportación | Exporta dashboard e historial filtrado | No ve acciones de exportación | Exporta reportes e historial en solo lectura | Formato CSV, filtros aplicados y aviso de ausencia de datos visibles antes y después de la acción |
 | Alertas | Configura, desactiva y elimina reglas | Ve alertas en dashboard; sin configuración | Ve alertas en dashboard en solo lectura | Regla activa, indicador, operador, umbral y severidad visibles; alerta desactivada deja de mostrarse |
 
